@@ -1,0 +1,14 @@
+{
+  "hymn_folder": "R:\\교회\\새찬송가 wide",
+  "hymn_slots": [
+    {
+      "after_slide_index": 1,
+      "name": "예배 시작"
+    },
+    {
+      "after_slide_index": 5,
+      "name": "사도신경 후"
+    }
+  ],
+  "template_file": "R:\\교회\\예배 PPT\\2026\\TEMPLATE2.pptx"
+}
