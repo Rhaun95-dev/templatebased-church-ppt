@@ -34,9 +34,9 @@ def save_config(config):
 
 def next_sunday_filename():
     today = date.today()
-    days_until_sunday = (6 - today.weekday()) % 7
-    if days_until_sunday == 0:
-        days_until_sunday = 7
+    days_until_sunday = 6 - today.weekday()  # 일요일(6)까지 남은 날 수
+    if days_until_sunday < 0:
+        days_until_sunday += 7
     sunday = today + timedelta(days=days_until_sunday)
     return sunday.strftime('%d.%m.%Y') + '.pptx'
 
@@ -403,12 +403,29 @@ def generate():
             hymn_file = find_hymn_file(hymn_folder, slot['hymn_number'])
             if not hymn_file:
                 continue
-            hymn_prs = Presentation(hymn_file)
+
+            # 찬송가 임시 복사본 생성 (원본 보호)
+            hymn_fd, hymn_tmp = tempfile.mkstemp(suffix='.pptx')
+            os.close(hymn_fd)
+            shutil.copy2(hymn_file, hymn_tmp)
+
+            hymn_prs = Presentation(hymn_tmp)
             n        = len(hymn_prs.slides)
+            del hymn_prs  # 파일 핸들 해제
             after    = slot.get('after_slide_index', 0)
+
+            # 각 슬라이드 배경을 slideMaster → 슬라이드 자체에 embed
             for i in range(n):
-                new_path = copy_slide_from_file_zip(hymn_file, i, work_path, after + i)
+                new_tmp = _embed_slide_background(hymn_tmp, i)
+                if new_tmp:
+                    os.unlink(hymn_tmp)
+                    hymn_tmp = new_tmp
+
+            for i in range(n):
+                new_path = copy_slide_from_file_zip(hymn_tmp, i, work_path, after + i)
                 os.unlink(work_path); work_path = new_path
+
+            os.unlink(hymn_tmp)
 
         # ── 5. Return ────────────────────────────────────────────────
         filename = next_sunday_filename()
@@ -606,6 +623,161 @@ def copy_slide_from_file_zip(src_path, src_slide_index, dst_path, insert_after):
 
 def duplicate_slide_zip(pptx_path, slide_index, insert_after):
     return copy_slide_from_file_zip(pptx_path, slide_index, pptx_path, insert_after)
+
+
+def _embed_slide_background(src_path: str, slide_index: int):
+    """
+    슬라이드에 p:bg가 없으면 slideLayout → slideMaster 순으로 배경을 찾아
+    슬라이드 XML에 직접 삽입한 새 임시파일 경로를 반환.
+    배경이 이미 있거나 찾지 못하면 None 반환.
+    """
+    ns_p = 'http://schemas.openxmlformats.org/presentationml/2006/main'
+    ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    ns_r = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+    pr_ns = _NSMAP['pr']
+
+    with zipfile.ZipFile(src_path, 'r') as zf:
+        slide_paths = _slide_paths_ordered(zf)
+        if slide_index >= len(slide_paths):
+            return None
+        slide_path = slide_paths[slide_index]
+        slide_xml  = _read_xml(zf, slide_path)
+
+        cSld = slide_xml.find(f'{{{ns_p}}}cSld')
+        if cSld is None:
+            return None
+
+        # 슬라이드 자체에 이미 배경 있으면 불필요
+        if cSld.find(f'{{{ns_p}}}bg') is not None:
+            return None
+
+        # slide rels → slideLayout 경로
+        slide_rels_path = _rels_path(slide_path)
+        layout_path = None
+        if slide_rels_path in zf.namelist():
+            srels = _read_xml(zf, slide_rels_path)
+            for rel in srels:
+                if 'slideLayout' in rel.get('Type', ''):
+                    t = rel.get('Target', '')
+                    layout_path = ('ppt/' + t[3:]) if t.startswith('../') else ('ppt/slides/' + t)
+                    break
+        if not layout_path or layout_path not in zf.namelist():
+            return None
+
+        # layout에서 p:bg 탐색
+        layout_xml  = _read_xml(zf, layout_path)
+        layout_cSld = layout_xml.find(f'{{{ns_p}}}cSld')
+        bg_el       = layout_cSld.find(f'{{{ns_p}}}bg') if layout_cSld is not None else None
+        bg_rels_path = _rels_path(layout_path)  # 이미지 rid 기준 rels
+
+        # layout에 없으면 slideMaster 탐색
+        if bg_el is None:
+            master_path = None
+            if bg_rels_path in zf.namelist():
+                lrels = _read_xml(zf, bg_rels_path)
+                for rel in lrels:
+                    if 'slideMaster' in rel.get('Type', ''):
+                        t = rel.get('Target', '')
+                        master_path = ('ppt/' + t[3:]) if t.startswith('../') else ('ppt/slideLayouts/' + t)
+                        break
+            if not master_path or master_path not in zf.namelist():
+                return None
+            master_xml  = _read_xml(zf, master_path)
+            master_cSld = master_xml.find(f'{{{ns_p}}}cSld')
+            bg_el       = master_cSld.find(f'{{{ns_p}}}bg') if master_cSld is not None else None
+            bg_rels_path = _rels_path(master_path)  # 이미지 rid는 master rels 기준
+
+        if bg_el is None:
+            return None
+
+        bg_copy = copy.deepcopy(bg_el)
+
+        # 배경 안 blip의 r:embed rid → 슬라이드 rels에 이미지 등록
+        blips = bg_copy.findall(f'.//{{{ns_a}}}blip')
+        new_rels_to_add = []  # (new_rid, img_dst_path, img_bytes)
+        rid_remap = {}
+
+        if blips and bg_rels_path in zf.namelist():
+            bg_rels_xml = _read_xml(zf, bg_rels_path)
+            rid_to_target = {r.get('Id', ''): r.get('Target', '') for r in bg_rels_xml}
+
+            # 슬라이드 기존 rels에서 최대 rid 번호 추출
+            srels_xml = _read_xml(zf, slide_rels_path) if slide_rels_path in zf.namelist() \
+                        else etree.Element(f'{{{pr_ns}}}Relationships')
+            max_rid_num = max(
+                (int(m.group(1)) for r in srels_xml
+                 for m in [re.match(r'rId(\d+)', r.get('Id', ''))] if m),
+                default=0
+            )
+
+            for blip in blips:
+                old_rid = blip.get(f'{{{ns_r}}}embed', '')
+                if not old_rid or old_rid in rid_remap:
+                    continue
+                img_rel_target = rid_to_target.get(old_rid, '')
+                if not img_rel_target:
+                    continue
+
+                # 이미지 실제 경로 (bg_rels_path 기준)
+                base_dir = bg_rels_path.replace('/_rels/', '/').rsplit('/', 1)[0]
+                if img_rel_target.startswith('../'):
+                    img_path = 'ppt/' + img_rel_target[3:]
+                else:
+                    img_path = base_dir + '/' + img_rel_target
+
+                if img_path not in zf.namelist():
+                    continue
+
+                img_bytes = zf.read(img_path)
+                max_rid_num += 1
+                new_rid = f'rId{max_rid_num}'
+                rid_remap[old_rid] = new_rid
+                new_rels_to_add.append((new_rid, img_path, img_bytes))
+
+            for blip in blips:
+                old_rid = blip.get(f'{{{ns_r}}}embed', '')
+                if old_rid in rid_remap:
+                    blip.set(f'{{{ns_r}}}embed', rid_remap[old_rid])
+
+        # 새 pptx 작성
+        out_fd, out_path = tempfile.mkstemp(suffix='.pptx')
+        os.close(out_fd)
+
+        with zipfile.ZipFile(src_path, 'r') as zf2, \
+             zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as out_zf:
+
+            # 슬라이드 rels에 이미지 rid 추가
+            srels_xml2 = _read_xml(zf2, slide_rels_path) if slide_rels_path in zf2.namelist() \
+                         else etree.Element(f'{{{pr_ns}}}Relationships')
+            for (new_rid, img_path, img_bytes) in new_rels_to_add:
+                new_rel = etree.SubElement(srels_xml2, f'{{{pr_ns}}}Relationship')
+                new_rel.set('Id',   new_rid)
+                new_rel.set('Type', f'{ns_r}/image')
+                img_filename = img_path.split('/')[-1]
+                new_rel.set('Target', f'../media/{img_filename}')
+
+            # 슬라이드 XML에 bg_copy 삽입 (cSld 첫 번째 자식)
+            slide_xml2 = _read_xml(zf2, slide_path)
+            cSld2 = slide_xml2.find(f'{{{ns_p}}}cSld')
+            if cSld2 is not None:
+                cSld2.insert(0, bg_copy)
+
+            for name in zf2.namelist():
+                if name == slide_path:
+                    out_zf.writestr(name, _xml_bytes(slide_xml2))
+                elif name == slide_rels_path:
+                    out_zf.writestr(name, _xml_bytes(srels_xml2))
+                else:
+                    out_zf.writestr(name, zf2.read(name))
+
+            # 새 이미지 파일 추가
+            for (new_rid, img_path, img_bytes) in new_rels_to_add:
+                img_filename = img_path.split('/')[-1]
+                dst = f'ppt/media/{img_filename}'
+                if dst not in zf2.namelist():
+                    out_zf.writestr(dst, img_bytes)
+
+    return out_path
 
 
 # ── Lyrics helpers ────────────────────────────
