@@ -233,8 +233,17 @@ def generate():
         # ── 1. Choir lyrics ───────────────────────────────────────────
         choir_inserted = 0
         if choir and not choir.get('skip'):
+            title_idx   = choir.get('title_slide_index')
+            song_title  = choir.get('song_title', '').strip()
             lyrics_idx  = choir.get('lyrics_slide_index')
             lyrics_text = choir.get('lyrics', '').strip()
+            
+            # 제목 슬라이드에 곡명 삽입
+            if song_title and title_idx is not None:
+                prs = Presentation(work_path)
+                set_slide_choir_title(prs.slides[title_idx], song_title)
+                prs.save(work_path)
+
             if lyrics_text and lyrics_idx is not None:
                 paragraphs = split_lyrics_into_paragraphs(lyrics_text)
                 if paragraphs:
@@ -332,18 +341,53 @@ def generate():
 
             pairs = [ev_verses[i:i+2] for i in range(0, len(ev_verses), 2)]
 
-            original_order_idx = (len(ev_in_order) - 1) - ev_orig_order
+            # original_order_idx = (len(ev_in_order) - 1) - ev_orig_order
 
+            # if original_order_idx >= 1:
+            #     # 구분 슬라이드: ev_idx 복제 후 텍스트 비움
+            #     new_path = duplicate_slide_zip(work_path, ev_idx, ev_idx)
+            #     os.unlink(work_path); work_path = new_path
+            #     prs = Presentation(work_path)
+            #     for shape in prs.slides[ev_idx + 1].shapes:
+            #         if shape.has_text_frame:
+            #             for para in shape.text_frame.paragraphs:
+            #                 for run in para.runs:
+            #                     run.text = ''
+            #     prs.save(work_path)
+            #     base = ev_idx + 1
+            # else:
+            #     base = ev_idx
+            # 두 번째 이상 추가구절: ev_idx 바로 뒤에 검은 배경 구분 슬라이드 1장 먼저 삽입
+            # ev_orig_order: reversed 기준이므로 0 = 마지막 구절, n-1 = 첫 번째 구절
+            # → 원래 순서 index = (len-1) - ev_orig_order
+            original_order_idx = (len(ev_in_order) - 1) - ev_orig_order
             if original_order_idx >= 1:
-                # 구분 슬라이드: ev_idx 복제 후 텍스트 비움
-                new_path = duplicate_slide_zip(work_path, ev_idx, ev_idx)
-                os.unlink(work_path); work_path = new_path
+                from pptx.util import Pt
+                from pptx.dml.color import RGBColor
+                from pptx.util import Emu
+                import copy
+
+                # 빈 검은 슬라이드 새로 삽입
                 prs = Presentation(work_path)
-                for shape in prs.slides[ev_idx + 1].shapes:
-                    if shape.has_text_frame:
-                        for para in shape.text_frame.paragraphs:
-                            for run in para.runs:
-                                run.text = ''
+                blank_layout = prs.slide_layouts[6]  # 완전 빈 레이아웃
+                new_slide = prs.slides.add_slide(blank_layout)
+
+                # 배경을 검정으로
+                from pptx.oxml.ns import qn
+                from lxml import etree
+                bg = new_slide.background
+                fill = bg.fill
+                fill.solid()
+                fill.fore_color.rgb = RGBColor(0, 0, 0)
+
+                # 삽입 위치: ev_idx+1 로 이동 (add_slide는 맨 뒤에 추가됨 → XML 재정렬)
+                xml_slides = prs.slides._sldIdLst
+                last = xml_slides[-1]
+                xml_slides.remove(last)
+                xml_slides.insert(ev_idx + 1, last)
+
+                # 구분 슬라이드가 ev_idx+1 위치에 들어갔으므로
+                # 이후 구절 슬라이드들은 ev_idx+1 뒤에 삽입
                 prs.save(work_path)
                 base = ev_idx + 1
             else:
@@ -584,6 +628,35 @@ def duplicate_slide_zip(pptx_path, slide_index, insert_after):
 
 
 # ── Lyrics helpers ────────────────────────────
+def set_slide_choir_title(slide, song_title: str):
+    """
+    성가대 제목 슬라이드: 가장 큰 텍스트박스의 첫 번째 run 내용만 교체.
+    서식(폰트 크기/색상 등)은 유지.
+    """
+    best_shape, best_size = None, 0
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            size = shape.width * shape.height
+            if size > best_size:
+                best_size  = size
+                best_shape = shape
+    if best_shape is None:
+        return
+
+    tf     = best_shape.text_frame
+    txBody = tf._txBody
+    paras  = txBody.findall(qn('a:p'))
+
+    for para in paras:
+        runs = para.findall(qn('a:r'))
+        if runs:
+            t_el = runs[0].find(qn('a:t'))
+            if t_el is None:
+                t_el = etree.SubElement(runs[0], qn('a:t'))
+            t_el.text = song_title
+            for extra_r in runs[1:]:
+                para.remove(extra_r)
+            break  # 첫 번째 단락만 교체
 
 def split_lyrics_into_paragraphs(text):
     return [p.strip() for p in re.split(r'\n\s*\n', text.strip()) if p.strip()]
