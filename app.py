@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, send_file
 from flask import send_from_directory
 import os, json, copy, re, shutil, tempfile, urllib.request
 from pptx import Presentation
+from pptx.util import Pt, Inches
+from pptx.dml.color import RGBColor
 from lxml import etree
 import io, zipfile
 from datetime import date, timedelta
@@ -304,8 +306,6 @@ def api_bible():
 
 
 # ── Generate ──────────────────────────────────
-
-
 @app.route("/api/generate", methods=["POST"])
 def generate():
     work_path = None
@@ -326,90 +326,97 @@ def generate():
         os.close(work_fd)
         shutil.copy2(template_file, work_path)
 
-        # ── 1. Choir lyrics ───────────────────────────────────────────
-        choir_inserted = 0
+        # ── 설계 원칙 ─────────────────────────────────────────────────
+        #
+        # 모든 삽입 작업을 원본 템플릿 기준 raw_after 인덱스로 정렬한 뒤
+        # 앞에서부터 순서대로 처리하면서 offset을 누적한다.
+        #
+        # extra_verses는 모두 동일한 template 슬라이드(ev_in_order[0].slide_index)를
+        # 공유하므로 ev_block 하나로 묶어서 순방향으로 처리한다:
+        #   ev[0]  : template 복제 → pairs 삽입 → 원본 삭제
+        #   ev[1+] : 검은 슬라이드 삽입 → template 복제 → pairs 삽입 (원본 유지)
+        #
+        # TYPE_PRIORITY (같은 raw_after일 때 처리 순서):
+        #   hymn=0 (최우선) → choir_title=1 → choir_lyrics=2
+        #   → sc_title=3 → sc_verse=4 → ev_block=5
+
+        TYPE_PRIORITY = {
+            "hymn": 0,
+            "choir_title": 1,
+            "choir_lyrics": 2,
+            "sc_title": 3,
+            "sc_verse": 4,
+            "ev_block": 5,
+        }
+
+        tasks = []
+
+        # ── choir ────────────────────────────────────────────────────
         if choir and not choir.get("skip"):
             title_idx = choir.get("title_slide_index")
-            song_title = choir.get("song_title", "").strip()
             lyrics_idx = choir.get("lyrics_slide_index")
+            song_title = choir.get("song_title", "").strip()
             lyrics_text = choir.get("lyrics", "").strip()
 
-            # 제목 슬라이드에 곡명 삽입
             if song_title and title_idx is not None:
-                prs = Presentation(work_path)
-                set_slide_choir_title(prs.slides[title_idx], song_title)
-                prs.save(work_path)
+                tasks.append(
+                    {
+                        "type": "choir_title",
+                        "raw_after": title_idx - 1,
+                        "song_title": song_title,
+                        "slide_raw": title_idx,
+                    }
+                )
 
             if lyrics_text and lyrics_idx is not None:
                 paragraphs = split_lyrics_into_paragraphs(lyrics_text)
                 if paragraphs:
-                    prs = Presentation(work_path)
-                    set_slide_lyrics(prs.slides[lyrics_idx], paragraphs[0])
-                    prs.save(work_path)
-                    for i, para in enumerate(paragraphs[1:], 1):
-                        insert_after = lyrics_idx + i - 1
-                        new_path = duplicate_slide_zip(
-                            work_path, lyrics_idx, insert_after
-                        )
-                        os.unlink(work_path)
-                        work_path = new_path
-                        prs = Presentation(work_path)
-                        set_slide_lyrics(prs.slides[insert_after + 1], para)
-                        prs.save(work_path)
-                        choir_inserted += 1
+                    tasks.append(
+                        {
+                            "type": "choir_lyrics",
+                            "raw_after": lyrics_idx - 1,
+                            "paragraphs": paragraphs,
+                            "template_raw": lyrics_idx,
+                        }
+                    )
 
-        # ── 2. Scripture (시작슬라이드 + 구절슬라이드들) ─────────────────
+        # ── scripture ────────────────────────────────────────────────
         if scripture and not scripture.get("skip"):
-            sc_title_idx = scripture.get("title_slide_index")  # 0-based, 시작슬라이드
-            sc_verse_idx = sc_title_idx + 1  # 0-based, 시작슬라이드
+            sc_title_idx = scripture.get("title_slide_index")
+            sc_verse_idx = (sc_title_idx + 1) if sc_title_idx is not None else None
             verses = scripture.get("verses", [])
             book_name = scripture.get("book_name", "")
             chapter = scripture.get("chapter", "")
             verse_start = scripture.get("verse_start", "")
             verse_end = scripture.get("verse_end", "")
 
-            # 시작 슬라이드: 책이름 + 장절 교체
             if sc_title_idx is not None and book_name:
-                prs = Presentation(work_path)
-                set_slide_title_scripture(
-                    prs.slides[sc_title_idx], book_name, chapter, verse_start, verse_end
+                tasks.append(
+                    {
+                        "type": "sc_title",
+                        "raw_after": sc_title_idx - 1,
+                        "book_name": book_name,
+                        "chapter": chapter,
+                        "verse_start": verse_start,
+                        "verse_end": verse_end,
+                        "slide_raw": sc_title_idx,
+                    }
                 )
-                prs.save(work_path)
-            sc_inserted = 0
 
-            # 구절 슬라이드들 (2절씩)
             if verses and sc_verse_idx is not None:
-                pairs = []
-                for i in range(0, len(verses), 2):
-                    chunk = verses[i : i + 2]
-                    pairs.append(chunk)
+                pairs = [verses[i : i + 2] for i in range(0, len(verses), 2)]
+                tasks.append(
+                    {
+                        "type": "sc_verse",
+                        "raw_after": sc_verse_idx - 1,
+                        "pairs": pairs,
+                        "book_name": book_name,
+                        "chapter": chapter,
+                        "template_raw": sc_verse_idx,
+                    }
+                )
 
-                prs = Presentation(work_path)
-                target_slide = prs.slides[sc_verse_idx]
-
-                set_slide_text_bibel(prs.slides[sc_verse_idx], pairs[0])
-                add_chapter_title_text(target_slide, f"{book_name} {chapter}장")
-
-                prs.save(work_path)
-
-                for i, pair in enumerate(pairs[1:], 1):
-                    insert_after = sc_verse_idx + i - 1
-                    new_path = duplicate_slide_zip(
-                        work_path, sc_verse_idx, insert_after
-                    )
-                    os.unlink(work_path)
-                    work_path = new_path
-                    prs = Presentation(work_path)
-                    set_slide_text_bibel(prs.slides[insert_after + 1], pair)
-                    target_slide = prs.slides[insert_after + 1]
-                    add_chapter_title_text(target_slide, f"{book_name} {chapter}장")
-
-                    prs.save(work_path)
-                    sc_inserted += 1
-        else:
-            sc_inserted = 0
-
-        # ── 3. 추가 구절 (extra_verses) ───────────────────────────────
+        # ── extra_verses (ev_block으로 묶어서 처리) ──────────────────
         ev_in_order = sorted(
             [
                 ev
@@ -419,139 +426,198 @@ def generate():
             key=lambda x: x["slide_index"],
         )
 
-        # 역순 처리: 인덱스 큰 것부터 삽입 → 앞쪽 인덱스에 영향 없음
-        # delete_slide는 루프 밖에서 일괄 처리 (루프 안 삭제 시 인덱스 틀어짐)
-        ev_idx_to_delete = 0
-
-        for ev_orig_order, ev in enumerate(reversed(ev_in_order)):
-            ev_raw_idx = ev["slide_index"]
-            # sc_lyrics_idx_val = (
-            #     scripture.get("lyrics_slide_index")
-            #     if scripture and not scripture.get("skip")
-            #     else None
-            # )
-            choir_lyrics_idx_val = (
-                choir.get("lyrics_slide_index")
-                if choir and not choir.get("skip")
-                else None
+        if ev_in_order:
+            # 모든 ev는 첫번째 ev의 slide_index를 template으로 공유
+            ev_template_raw = ev_in_order[0]["slide_index"]
+            tasks.append(
+                {
+                    "type": "ev_block",
+                    "raw_after": ev_template_raw - 1,
+                    "template_raw": ev_template_raw,
+                    "ev_list": ev_in_order,
+                }
             )
 
-            ev_idx = ev_raw_idx
-            if choir_lyrics_idx_val is not None and ev_raw_idx > choir_lyrics_idx_val:
-                ev_idx += choir_inserted
-            # if sc_lyrics_idx_val is not None and ev_raw_idx > sc_lyrics_idx_val:
-            #     ev_idx += sc_inserted
-            ev_idx_to_delete = ev_idx
-            ev_verses = ev["verses"]
-            ev_book = ev.get("book_name", "")
-            ev_ch = str(ev.get("chapter", ""))
-
-            prs_check = Presentation(work_path)
-            total = len(prs_check.slides)
-            if ev_idx >= total:
+        # ── hymns ─────────────────────────────────────────────────────
+        for slot in hymn_slots:
+            if slot.get("skip") or not slot.get("hymn_number"):
                 continue
-
-            pairs = [ev_verses[i : i + 2] for i in range(0, len(ev_verses), 2)]
-
-            original_order_idx = (len(ev_in_order) - 1) - ev_orig_order
-            if original_order_idx >= 1:
-                from pptx.util import Pt
-                from pptx.dml.color import RGBColor
-                from pptx.util import Emu
-                import copy
-
-                # 빈 검은 슬라이드 새로 삽입
-                prs = Presentation(work_path)
-                blank_layout = prs.slide_layouts[6]  # 완전 빈 레이아웃
-                new_slide = prs.slides.add_slide(blank_layout)
-
-                # 배경을 검정으로
-                from pptx.oxml.ns import qn
-                from lxml import etree
-
-                bg = new_slide.background
-                fill = bg.fill
-                fill.solid()
-                fill.fore_color.rgb = RGBColor(0, 0, 0)
-
-                # 삽입 위치: ev_idx+1 로 이동 (add_slide는 맨 뒤에 추가됨 → XML 재정렬)
-                xml_slides = prs.slides._sldIdLst
-                last = xml_slides[-1]
-                xml_slides.remove(last)
-                xml_slides.insert(ev_idx + 1, last)
-
-                # 구분 슬라이드가 ev_idx+1 위치에 들어갔으므로
-                # 이후 구절 슬라이드들은 ev_idx+1 뒤에 삽입
-                prs.save(work_path)
-                base = ev_idx + 1
-            else:
-                base = ev_idx
-
-            for i, pair in enumerate(pairs):
-                ins_after = base + i
-                new_path = duplicate_slide_zip(work_path, ev_idx, ins_after)
-                os.unlink(work_path)
-                work_path = new_path
-
-                prs = Presentation(work_path)
-                target_slide = prs.slides[ins_after + 1]
-                set_slide_text_bibel(target_slide, pair)
-                add_chapter_title_text(target_slide, f"{ev_book} {ev_ch}장")
-                prs.save(work_path)
-
-            # 다음 추가 구절을 위해 기준 인덱스 업데이트
-            num_slides_added = len(pairs)
-            if original_order_idx >= 1:
-                # 구분 슬라이드 1개 + 구절 슬라이드들
-                num_slides_added += 1
-            ev_idx += num_slides_added
-            base = ev_idx
-
-            # ev_indices_to_delete.append(ev_idx - num_slides_added)
-
-        # 원본 템플릿 슬라이드들 일괄 삭제 (내림차순으로 삭제해야 인덱스 안 밀림)
-        # if ev_indices_to_delete:
-        # prs = Presentation(work_path)
-        #     for idx in sorted(ev_indices_to_delete, reverse=True):
-        delete_slide(prs, ev_idx_to_delete)
-        prs.save(work_path)
-
-        # ── 4. Hymn insertion (back-to-front) ─────────────────────────
-        active = [s for s in hymn_slots if not s.get("skip") and s.get("hymn_number")]
-        active = sorted(
-            active, key=lambda x: x.get("after_slide_index", 0), reverse=True
-        )
-
-        for slot in active:
             hymn_file = find_hymn_file(hymn_folder, slot["hymn_number"])
             if not hymn_file:
                 continue
+            hymn_prs_tmp = Presentation(hymn_file)
+            n_hymn_slides = len(hymn_prs_tmp.slides)
+            del hymn_prs_tmp
+            tasks.append(
+                {
+                    "type": "hymn",
+                    "raw_after": slot.get("after_slide_index", 0),
+                    "hymn_file": hymn_file,
+                    "n_slides": n_hymn_slides,
+                }
+            )
 
-            # 찬송가 임시 복사본 생성 (원본 보호)
-            hymn_fd, hymn_tmp = tempfile.mkstemp(suffix=".pptx")
-            os.close(hymn_fd)
-            shutil.copy2(hymn_file, hymn_tmp)
+        # ── 정렬 후 순서대로 처리, offset 누적 ──────────────────────
+        tasks.sort(key=lambda t: (t["raw_after"], TYPE_PRIORITY.get(t["type"], 9)))
 
-            hymn_prs = Presentation(hymn_tmp)
-            n = len(hymn_prs.slides)
-            del hymn_prs  # 파일 핸들 해제
-            after = slot.get("after_slide_index", 0)
+        offset = 0
 
-            # 각 슬라이드 배경을 slideMaster → 슬라이드 자체에 embed
-            for i in range(n):
-                new_tmp = _embed_slide_background(hymn_tmp, i)
-                if new_tmp:
-                    os.unlink(hymn_tmp)
-                    hymn_tmp = new_tmp
+        for task in tasks:
+            actual_after = task["raw_after"] + offset
+            t = task["type"]
 
-            for i in range(n):
-                new_path = copy_slide_from_file_zip(hymn_tmp, i, work_path, after + i)
-                os.unlink(work_path)
-                work_path = new_path
+            # ── choir 제목 수정 (슬라이드 수 변화 없음) ───────────────
+            if t == "choir_title":
+                prs = Presentation(work_path)
+                set_slide_choir_title(
+                    prs.slides[task["slide_raw"] + offset],
+                    task["song_title"],
+                )
+                prs.save(work_path)
 
-            os.unlink(hymn_tmp)
+            # ── choir 가사 (원본 교체 + 추가 단락 복제) ──────────────
+            elif t == "choir_lyrics":
+                paragraphs = task["paragraphs"]
+                template_idx = task["template_raw"] + offset
 
-        # ── 5. Return ────────────────────────────────────────────────
+                prs = Presentation(work_path)
+                set_slide_lyrics(prs.slides[template_idx], paragraphs[0])
+                prs.save(work_path)
+
+                for i, para in enumerate(paragraphs[1:], 1):
+                    ins = template_idx + i - 1
+                    new_path = duplicate_slide_zip(work_path, template_idx, ins)
+                    os.unlink(work_path)
+                    work_path = new_path
+                    prs = Presentation(work_path)
+                    set_slide_lyrics(prs.slides[ins + 1], para)
+                    prs.save(work_path)
+                    offset += 1
+
+            # ── scripture 제목 수정 (슬라이드 수 변화 없음) ───────────
+            elif t == "sc_title":
+                prs = Presentation(work_path)
+                set_slide_title_scripture(
+                    prs.slides[task["slide_raw"] + offset],
+                    task["book_name"],
+                    task["chapter"],
+                    task["verse_start"],
+                    task["verse_end"],
+                )
+                prs.save(work_path)
+
+            # ── scripture 구절 (원본 교체 + 추가 pair 복제) ──────────
+            elif t == "sc_verse":
+                pairs = task["pairs"]
+                template_idx = task["template_raw"] + offset
+
+                prs = Presentation(work_path)
+                sl = prs.slides[template_idx]
+                set_slide_text_bibel(sl, pairs[0])
+                add_chapter_title_text(sl, f"{task['book_name']} {task['chapter']}장")
+                prs.save(work_path)
+
+                for i, pair in enumerate(pairs[1:], 1):
+                    ins = template_idx + i - 1
+                    new_path = duplicate_slide_zip(work_path, template_idx, ins)
+                    os.unlink(work_path)
+                    work_path = new_path
+                    prs = Presentation(work_path)
+                    sl = prs.slides[ins + 1]
+                    set_slide_text_bibel(sl, pair)
+                    add_chapter_title_text(
+                        sl, f"{task['book_name']} {task['chapter']}장"
+                    )
+                    prs.save(work_path)
+                    offset += 1
+
+            # ── extra_verses 블록 ─────────────────────────────────────
+            elif t == "ev_block":
+                template_raw = task["template_raw"]
+
+                for ev_i, ev in enumerate(task["ev_list"]):
+                    ev_verses = ev.get("verses", [])
+                    ev_book = ev.get("book_name", "")
+                    ev_ch = str(ev.get("chapter", ""))
+                    pairs = [ev_verses[j : j + 2] for j in range(0, len(ev_verses), 2)]
+                    cur_tmpl = template_raw + offset  # template 슬라이드 현재 위치
+
+                    if ev_i == 0:
+                        # ev[0]: template 뒤에 pairs 복제 삽입 → template 삭제
+                        for i, pair in enumerate(pairs):
+                            new_path = duplicate_slide_zip(
+                                work_path, cur_tmpl, cur_tmpl + i
+                            )
+                            os.unlink(work_path)
+                            work_path = new_path
+                            prs = Presentation(work_path)
+                            sl = prs.slides[cur_tmpl + i + 1]
+                            set_slide_text_bibel(sl, pair)
+                            add_chapter_title_text(sl, f"{ev_book} {ev_ch}장")
+                            prs.save(work_path)
+
+                        prs = Presentation(work_path)
+                        delete_slide(prs, cur_tmpl)
+                        prs.save(work_path)
+                        offset += len(pairs) - 1  # pairs개 추가 - template 1개 삭제
+
+                    else:
+                        # ev[1+]: 검은 슬라이드 삽입 → template으로 pairs 복제 삽입
+                        # 1) 검은 슬라이드를 cur_tmpl 바로 뒤에 삽입
+                        prs = Presentation(work_path)
+                        blank_layout = prs.slide_layouts[6]
+                        new_slide = prs.slides.add_slide(blank_layout)
+                        new_slide.background.fill.solid()
+                        new_slide.background.fill.fore_color.rgb = RGBColor(0, 0, 0)
+                        xml_slides = prs.slides._sldIdLst
+                        last = xml_slides[-1]
+                        xml_slides.remove(last)
+                        xml_slides.insert(cur_tmpl + 1, last)
+                        prs.save(work_path)
+                        offset += 1
+
+                        # 2) 검은 슬라이드 뒤에 pairs 복제 삽입
+                        insert_base = cur_tmpl + 1  # 검은 슬라이드 현재 위치
+                        for i, pair in enumerate(pairs):
+                            new_path = duplicate_slide_zip(
+                                work_path, cur_tmpl, insert_base + i
+                            )
+                            os.unlink(work_path)
+                            work_path = new_path
+                            prs = Presentation(work_path)
+                            sl = prs.slides[insert_base + i + 1]
+                            set_slide_text_bibel(sl, pair)
+                            add_chapter_title_text(sl, f"{ev_book} {ev_ch}장")
+                            prs.save(work_path)
+
+                        offset += len(pairs)  # 검은 슬라이드 offset은 위에서 이미 반영
+
+            # ── 찬송가 삽입 ──────────────────────────────────────────
+            elif t == "hymn":
+                hymn_file = task["hymn_file"]
+                n_slides = task["n_slides"]
+
+                hymn_fd, hymn_tmp = tempfile.mkstemp(suffix=".pptx")
+                os.close(hymn_fd)
+                shutil.copy2(hymn_file, hymn_tmp)
+
+                for i in range(n_slides):
+                    new_tmp = _embed_slide_background(hymn_tmp, i)
+                    if new_tmp:
+                        os.unlink(hymn_tmp)
+                        hymn_tmp = new_tmp
+
+                for i in range(n_slides):
+                    new_path = copy_slide_from_file_zip(
+                        hymn_tmp, i, work_path, actual_after + i
+                    )
+                    os.unlink(work_path)
+                    work_path = new_path
+
+                os.unlink(hymn_tmp)
+                offset += n_slides
+
+        # ── Return ───────────────────────────────────────────────────
         filename = next_sunday_filename()
         with open(work_path, "rb") as f:
             data_bytes = f.read()
