@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
@@ -837,7 +837,13 @@
                     id="sc-book"
                     placeholder="예: 요, 롬, 시"
                     autocomplete="off"
-                    oninput="onScriptureBookInput(this.value,'sc-book-dropdown','sc-book-status')"
+                    oninput="
+                      onScriptureBookInput(
+                        this.value,
+                        'sc-book-dropdown',
+                        'sc-book-status',
+                      )
+                    "
                   />
                   <div
                     id="sc-book-dropdown"
@@ -1005,7 +1011,13 @@
                       id="ev-book"
                       placeholder="요, 롬, 시"
                       autocomplete="off"
-                      oninput="onScriptureBookInput(this.value,'ev-book-dropdown','ev-book-status')"
+                      oninput="
+                        onScriptureBookInput(
+                          this.value,
+                          'ev-book-dropdown',
+                          'ev-book-status',
+                        )
+                      "
                     />
                     <div
                       id="ev-book-dropdown"
@@ -1491,8 +1503,8 @@
             <div class="ev-item-info">
               <div class="ev-item-ref">${ev.ref}</div>
               <div class="ev-item-slide">슬라이드 ${ev.slide_index + 1} · ${
-            ev.verses.length
-          }절 · ${Math.ceil(ev.verses.length / 2)}장 분할</div>
+                ev.verses.length
+              }절 · ${Math.ceil(ev.verses.length / 2)}장 분할</div>
             </div>
             <button class="btn btn-danger" onclick="removeExtraVerse(${idx})">✕</button>
           `;
@@ -1611,11 +1623,17 @@
           slot.hymn_title === "없음"
             ? "not-found"
             : slot.hymn_title
-            ? "found"
-            : ""
+              ? "found"
+              : ""
         }">
           ${slot.hymn_title || ""}
         </div>
+        <label style="cursor:pointer;margin:0;" title="파일 직접 업로드">
+          <input type="file" accept=".pptx" style="display:none"
+            onchange="uploadHymnFile(${idx}, this)"
+            ${slot.skip ? "disabled" : ""}>
+          <span class="btn btn-outline btn-sm" style="white-space:nowrap">📎 파일</span>
+        </label>
       </div>
       <label class="skip-toggle">
         <input type="checkbox" ${
@@ -1628,10 +1646,35 @@
         });
       }
 
+      async function uploadHymnFile(idx, input) {
+        const file = input.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+          const res = await fetch("/api/upload-hymn", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.error) {
+            alert("업로드 실패: " + data.error);
+            return;
+          }
+          state.genSlots[idx].upload_path = data.upload_path;
+          state.genSlots[idx].hymn_number = "";
+          state.genSlots[idx].hymn_title = "📎 " + data.display_name;
+          renderSlots();
+        } catch (e) {
+          alert("업로드 오류: " + e.message);
+        }
+      }
+
       let hymnSearchTimers = {};
       async function onHymnNumberInput(idx, value) {
         state.genSlots[idx].hymn_number = value;
         state.genSlots[idx].hymn_title = "";
+        state.genSlots[idx].upload_path = null; // 번호 입력 시 업로드 파일 초기화
         clearTimeout(hymnSearchTimers[idx]);
         if (!value) {
           renderSlots();
@@ -1747,23 +1790,23 @@
           showAlert(
             "generate-alert",
             "템플릿 파일 경로를 입력해주세요",
-            "error"
+            "error",
           );
           return;
         }
 
         const activeSlots = state.genSlots.filter((s) => !s.skip);
-        const missingHymns = activeSlots.filter((s) => !s.hymn_number);
-        if (missingHymns.length > 0) {
-          showAlert(
-            "generate-alert",
-            `찬송가 번호가 없는 슬롯이 있어요: ${missingHymns
-              .map((s) => s.name)
-              .join(", ")}`,
-            "error"
-          );
-          return;
-        }
+        // const missingHymns = activeSlots.filter((s) => !s.hymn_number);
+        // if (missingHymns.length > 0) {
+        //   showAlert(
+        //     "generate-alert",
+        //     `찬송가 번호가 없는 슬롯이 있어요: ${missingHymns
+        //       .map((s) => s.name)
+        //       .join(", ")}`,
+        //     "error",
+        //   );
+        //   return;
+        // }
 
         // 성가대 확인
         const choirEnabled = document.getElementById("choir-enabled").checked;
@@ -1775,7 +1818,7 @@
             showAlert(
               "generate-alert",
               "성가대 가사 슬라이드 번호를 입력해주세요",
-              "error"
+              "error",
             );
             return;
           }
@@ -1795,7 +1838,7 @@
             showAlert(
               "generate-alert",
               "성경 구절 템플릿 슬라이드 번호를 입력해주세요",
-              "error"
+              "error",
             );
             return;
           }
@@ -1803,7 +1846,7 @@
             showAlert(
               "generate-alert",
               "성경 구절을 먼저 가져오세요 (📖 구절 가져오기)",
-              "error"
+              "error",
             );
             return;
           }
@@ -1820,6 +1863,7 @@
               name: s.name,
               after_slide_index: s.after_slide_index,
               hymn_number: s.hymn_number,
+              upload_path: s.upload_path || null,
               skip: s.skip,
             })),
             choir: choirEnabled
@@ -1918,6 +1962,7 @@
             after_slide_index: s.after_slide_index,
             hymn_number: "",
             hymn_title: "",
+            upload_path: null,
             skip: false,
           }));
           renderSlots();
@@ -2009,6 +2054,7 @@
             after_slide_index: s.after_slide_index,
             hymn_number: "",
             hymn_title: "",
+            upload_path: null,
             skip: false,
           }));
           renderSlots();
