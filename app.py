@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_file
 from flask import send_from_directory
-import os, json, copy, re, shutil, tempfile, urllib.request
+import os, json, copy, re, shutil, tempfile, urllib.request, uuid
 from pptx import Presentation
 from pptx.util import Pt, Inches
 from pptx.dml.color import RGBColor
@@ -162,6 +162,19 @@ def get_bible_chapter(book_id: str, chapter: int) -> dict:
 
 
 # ── Routes ────────────────────────────────────
+
+HYMN_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "hymn_uploads")
+os.makedirs(HYMN_UPLOAD_DIR, exist_ok=True)
+
+
+@app.route("/api/upload-hymn", methods=["POST"])
+def upload_hymn():
+    f = request.files.get("file")
+    if not f or not f.filename.lower().endswith(".pptx"):
+        return jsonify({"error": "pptx 파일만 업로드 가능합니다"})
+    save_path = os.path.join(HYMN_UPLOAD_DIR, uuid.uuid4().hex + ".pptx")
+    f.save(save_path)
+    return jsonify({"upload_path": save_path, "display_name": f.filename})
 
 
 @app.route("/")
@@ -440,10 +453,18 @@ def generate():
 
         # ── hymns ─────────────────────────────────────────────────────
         for slot in hymn_slots:
-            if slot.get("skip") or not slot.get("hymn_number"):
+            if slot.get("skip"):
                 continue
-            hymn_file = find_hymn_file(hymn_folder, slot["hymn_number"])
-            if not hymn_file:
+            # 업로드 파일 우선, 없으면 번호로 검색
+            if slot.get("upload_path"):
+                hymn_file = slot["upload_path"]
+                if not os.path.exists(hymn_file):
+                    continue
+            elif slot.get("hymn_number"):
+                hymn_file = find_hymn_file(hymn_folder, slot["hymn_number"])
+                if not hymn_file:
+                    continue
+            else:
                 continue
             hymn_prs_tmp = Presentation(hymn_file)
             n_hymn_slides = len(hymn_prs_tmp.slides)
