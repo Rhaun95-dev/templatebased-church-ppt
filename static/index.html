@@ -1796,17 +1796,6 @@
         }
 
         const activeSlots = state.genSlots.filter((s) => !s.skip);
-        // const missingHymns = activeSlots.filter((s) => !s.hymn_number);
-        // if (missingHymns.length > 0) {
-        //   showAlert(
-        //     "generate-alert",
-        //     `찬송가 번호가 없는 슬롯이 있어요: ${missingHymns
-        //       .map((s) => s.name)
-        //       .join(", ")}`,
-        //     "error",
-        //   );
-        //   return;
-        // }
 
         // 성가대 확인
         const choirEnabled = document.getElementById("choir-enabled").checked;
