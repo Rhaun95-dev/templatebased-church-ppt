@@ -8,6 +8,18 @@
     {
       "after_slide_index": 5,
       "name": "사도신경 후"
+    },
+    {
+      "name": "예배 전",
+      "after_slide_index": 0
+    },
+    {
+      "name": "설교 후",
+      "after_slide_index": 14
+    },
+    {
+      "name": "예배 전 2",
+      "after_slide_index": 0
     }
   ],
   "template_file": "R:\\교회\\예배 PPT\\2026\\TEMPLATE2.pptx"
