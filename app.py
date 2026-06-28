@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from flask import send_from_directory
 import os, json, copy, re, shutil, tempfile, urllib.request, uuid
 from pptx import Presentation
@@ -8,9 +8,14 @@ from lxml import etree
 import io, zipfile
 from datetime import date, timedelta
 import sys
+import os
+import win32com.client
+import pythoncom
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
+
 app = Flask(__name__, static_folder="static")
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 BIBLE_CACHE_DIR = os.path.join(os.path.dirname(__file__), "static", "bible_cache")
 BIBLE_META_FILE = os.path.join(os.path.dirname(__file__), "static", "bible_meta.json")
@@ -167,23 +172,99 @@ HYMN_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "hymn_upload
 os.makedirs(HYMN_UPLOAD_DIR, exist_ok=True)
 
 
+# @app.route("/api/upload-hymn", methods=["POST"])
+# def upload_hymn():
+#     f = request.files.get("file")
+#     if not f or not f.filename.lower().endswith(".pptx"):
+#         return jsonify({"error": "pptx 파일만 업로드 가능합니다"})
+#     save_path = os.path.join(HYMN_UPLOAD_DIR, uuid.uuid4().hex + ".pptx")
+#     f.save(save_path)
+#     return jsonify({"upload_path": save_path, "display_name": f.filename})
 @app.route("/api/upload-hymn", methods=["POST"])
 def upload_hymn():
     f = request.files.get("file")
-    if not f or not f.filename.lower().endswith(".pptx"):
-        return jsonify({"error": "pptx 파일만 업로드 가능합니다"})
-    save_path = os.path.join(HYMN_UPLOAD_DIR, uuid.uuid4().hex + ".pptx")
+
+    if not f:
+        return jsonify({"error": "파일이 없습니다"})
+
+    filename = f.filename.lower()
+
+    allowed_exts = (".ppt", ".pptx")
+
+    if not filename.endswith(allowed_exts):
+        return jsonify({"error": "ppt 또는 pptx 파일만 업로드 가능합니다"})
+
+    ext = os.path.splitext(filename)[1]
+
+    save_path = os.path.join(
+        HYMN_UPLOAD_DIR,
+        uuid.uuid4().hex + ext
+    )
+
     f.save(save_path)
-    return jsonify({"upload_path": save_path, "display_name": f.filename})
 
+    final_path = save_path
 
-@app.route("/")
+    # ppt면 자동 변환
+    if ext == ".ppt":
+        final_path = convert_ppt_to_pptx(save_path)
+
+    return jsonify({
+        "upload_path": final_path,
+        "display_name": f.filename
+    })
+
+def convert_ppt_to_pptx(ppt_path):
+    powerpoint = None
+    presentation = None
+
+    try:
+        # COM 초기화
+        pythoncom.CoInitialize()
+
+        powerpoint = win32com.client.Dispatch("PowerPoint.Application")
+        powerpoint.Visible = 1
+
+        abs_path = os.path.abspath(ppt_path)
+
+        presentation = powerpoint.Presentations.Open(
+            abs_path,
+            WithWindow=False
+        )
+
+        pptx_path = os.path.splitext(abs_path)[0] + ".pptx"
+
+        # 24 = pptx format
+        presentation.SaveAs(pptx_path, 24)
+
+        return pptx_path
+
+    finally:
+        try:
+            if presentation:
+                presentation.Close()
+        except:
+            pass
+
+        try:
+            if powerpoint:
+                powerpoint.Quit()
+        except:
+            pass
+
+        try:
+            pythoncom.CoUninitialize()
+        except:
+            pass
+            
+@app.route('/')
 def index():
-    return send_from_directory("static", "index.html")
+    return render_template('index.html')
 
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
+    print("HIT /api/config")  # 이거 반드시 찍힘
     return jsonify(load_config())
 
 
@@ -617,6 +698,13 @@ def generate():
             elif t == "hymn":
                 hymn_file = task["hymn_file"]
                 n_slides = task["n_slides"]
+       
+                # w, h = get_slide_size(hymn_file)
+
+                # prs = Presentation(work_path)
+                # prs.slide_width = w
+                # prs.slide_height = h
+                # prs.save(work_path)
 
                 hymn_fd, hymn_tmp = tempfile.mkstemp(suffix=".pptx")
                 os.close(hymn_fd)
@@ -738,7 +826,9 @@ EXT_MIME = {
     "mp3": "audio/mpeg",
     "wav": "audio/wav",
 }
-
+def get_slide_size(pptx_path):
+    prs = Presentation(pptx_path)
+    return prs.slide_width, prs.slide_height
 
 def copy_slide_from_file_zip(src_path, src_slide_index, dst_path, insert_after):
     out_fd, out_path = tempfile.mkstemp(suffix=".pptx")

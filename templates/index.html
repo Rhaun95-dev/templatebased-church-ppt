@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>교회 PPT 자동화</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app-header">
+      <span class="cross">✝</span>
+      <div>
+        <h1>교회 PPT 자동화</h1>
+        <p>찬송가 삽입 · 성가대 가사 분할</p>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('generate', this)">
+          ✨ PPT 생성
+        </button>
+        <button class="tab-btn" onclick="switchTab('settings', this)">
+          ⚙️ 설정
+        </button>
+      </div>
+
+      <div id="tab-generate" class="tab-panel active">
+        <div class="card">
+          <div class="card-title">템플릿 파일</div>
+          <label>이번 주 템플릿 파일 경로</label>
+          <div class="path-input-row">
+            <input
+              type="text"
+              id="gen-template"
+              placeholder="C:\Church\template_2024.pptx"
+            />
+            <button
+              class="btn btn-outline btn-sm"
+              onclick="loadTemplateSlides()"
+            >
+              슬라이드 불러오기
+            </button>
+          </div>
+          <div class="path-status" id="gen-template-status"></div>
+
+          <div id="gen-slide-picker" style="display: none; margin-top: 12px">
+            <label
+              >슬라이드 목록
+              <span style="color: var(--text-light); font-size: 11px"
+                >— 성가대 슬라이드 클릭으로 선택</span
+              ></label
+            >
+            <div class="slide-picker" id="gen-slides-list"></div>
+            <p
+              class="section-hint"
+              id="gen-select-hint"
+              style="margin-top: 6px"
+            >
+              제목 슬라이드를 클릭하세요
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">찬송가 삽입 위치 설정</div>
+          <p class="section-hint">
+            각 슬롯마다 찬송가 번호를 입력하세요. 스킵하면 해당 위치는
+            건너뜁니다.
+          </p>
+          <div class="slot-list" id="slot-list"></div>
+          <div class="add-slot-row">
+            <div style="flex: 1">
+              <label>슬라이드 이름 (예: 1부찬양)</label>
+              <input type="text" id="new-slot-name" placeholder="1부찬양" />
+            </div>
+            <div>
+              <label>몇 번 슬라이드 이후</label>
+              <input
+                type="number"
+                id="new-slot-after"
+                placeholder="3"
+                min="1"
+                style="width: 90px"
+              />
+            </div>
+            <button
+              class="btn btn-outline btn-sm"
+              onclick="addSlot()"
+              style="margin-bottom: 2px"
+            >
+              + 추가
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-toggle">
+            <span class="section-toggle-label">성가대 가사</span>
+            <label class="toggle-switch">
+              <input
+                type="checkbox"
+                id="choir-enabled"
+                checked
+                onchange="toggleChoirSection()"
+              />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="choir-section" id="choir-section">
+            <p class="section-hint" style="margin-top: 0; margin-bottom: 14px">
+              빈 줄(Enter 두 번)로 단락을 구분하면 슬라이드가 자동 분할됩니다.
+            </p>
+
+            <div class="choir-slide-select">
+              <div>
+                <label>제목 슬라이드 (번호)</label>
+                <input
+                  type="number"
+                  id="choir-title-idx"
+                  placeholder="예: 5"
+                  min="1"
+                />
+                <div class="path-status" id="choir-title-status"></div>
+              </div>
+              <div>
+                <label>가사 템플릿 슬라이드 (번호)</label>
+                <input
+                  type="number"
+                  id="choir-lyrics-idx"
+                  placeholder="예: 6"
+                  min="1"
+                />
+                <div class="path-status" id="choir-lyrics-status"></div>
+              </div>
+            </div>
+
+            <label style="margin-top: 16px">곡명</label>
+            <input
+              type="text"
+              id="choir-song-title"
+              placeholder="예: 주님의 은혜"
+            />
+
+            <label style="margin-top: 14px"
+              >성가대 가사 입력
+              <span style="color: var(--text-light); font-size: 11px"
+                >(빈 줄로 단락 구분)</span
+              >
+            </label>
+            <textarea
+              id="choir-lyrics"
+              placeholder="1절&#10;주님의 은혜 감사해요&#10;늘 함께하시네&#10;&#10;2절&#10;어둠 속에서도 빛 되시는&#10;주 나의 구원자"
+              oninput="autoPreviewChoir()"
+            ></textarea>
+
+            <div id="choir-preview" style="display: none; margin-top: 10px">
+              <div
+                id="choir-preview-toggle"
+                style="
+                  color: var(--text-light);
+                  font-size: 11px;
+                  cursor: pointer;
+                  margin-bottom: 8px;
+                "
+                onclick="toggleChoirPreview()"
+              >
+                미리보기 펼치기
+              </div>
+
+              <div
+                id="choir-preview-list"
+                style="
+                  display: none;
+                  flex-direction: column;
+                  gap: 8px;
+                  margin-top: 8px;
+                "
+              ></div>
+
+              <div
+                id="choir-preview-close"
+                style="
+                  color: var(--text-light);
+                  font-size: 11px;
+                  display: none;
+                  cursor: pointer;
+                  margin-top: 8px;
+                "
+                onclick="toggleChoirPreview()"
+              >
+                접기
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-toggle">
+            <span class="section-toggle-label">성경 구절</span>
+            <label class="toggle-switch">
+              <input
+                type="checkbox"
+                id="scripture-enabled"
+                checked
+                onchange="toggleScriptureSection()"
+              />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="scripture-section" id="scripture-section">
+            <p class="section-hint" style="margin-top: 0; margin-bottom: 12px">
+              시작 슬라이드(책이름/장절)와 구절 템플릿 슬라이드를 각각
+              지정하세요.
+            </p>
+
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                margin-bottom: 4px;
+              "
+            >
+              <div>
+                <label
+                  >시작 슬라이드 번호
+                  <span style="color: var(--text-light); font-size: 11px"
+                    >(책이름/장절)</span
+                  ></label
+                >
+                <input
+                  type="number"
+                  id="sc-title-idx"
+                  placeholder="예: 7"
+                  min="1"
+                />
+                <div class="path-status" id="sc-title-status"></div>
+              </div>
+              <div>
+                <label>구절 템플릿 슬라이드 번호</label>
+                <input
+                  type="number"
+                  id="sc-lyrics-idx"
+                  placeholder="예: 8"
+                  min="1"
+                />
+                <div class="path-status" id="sc-lyrics-status"></div>
+              </div>
+            </div>
+
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 2fr 1fr 1fr 1fr;
+                gap: 10px;
+                align-items: end;
+                margin-top: 10px;
+              "
+            >
+              <div>
+                <label>책 (약어)</label>
+                <div style="position: relative">
+                  <input
+                    type="text"
+                    id="sc-book"
+                    placeholder="예: 요, 롬, 시"
+                    autocomplete="off"
+                    oninput="onScriptureBookInput(this.value, 'sc-book-dropdown', 'sc-book-status')"
+                  />
+                  <div
+                    id="sc-book-dropdown"
+                    style="
+                      display: none;
+                      position: absolute;
+                      top: 100%;
+                      left: 0;
+                      right: 0;
+                      z-index: 100;
+                      background: var(--dark2);
+                      border: 1px solid #4a4020;
+                      border-radius: 8px;
+                      max-height: 180px;
+                      overflow-y: auto;
+                      margin-top: 2px;
+                    "
+                  ></div>
+                </div>
+                <div class="path-status" id="sc-book-status"></div>
+              </div>
+              <div>
+                <label>장</label>
+                <input type="number" id="sc-chapter" placeholder="3" min="1" />
+              </div>
+              <div>
+                <label>시작 절</label>
+                <input
+                  type="number"
+                  id="sc-verse-start"
+                  placeholder="16"
+                  min="1"
+                />
+              </div>
+              <div>
+                <label>끝 절</label>
+                <input
+                  type="number"
+                  id="sc-verse-end"
+                  placeholder="17"
+                  min="1"
+                />
+              </div>
+            </div>
+
+            <button
+              class="btn btn-outline btn-sm"
+              style="margin-top: 10px"
+              onclick="fetchScripture()"
+            >
+              📖 구절 가져오기
+            </button>
+            <span
+              id="sc-fetch-status"
+              style="
+                font-size: 12px;
+                color: var(--text-light);
+                margin-left: 10px;
+              "
+            ></span>
+
+            <div id="sc-preview" style="display: none; margin-top: 14px">
+              <div
+                id="sc-ref-badge"
+                style="
+                  display: inline-block;
+                  background: rgba(201, 168, 76, 0.15);
+                  border: 1px solid rgba(201, 168, 76, 0.3);
+                  border-radius: 6px;
+                  padding: 3px 10px;
+                  font-size: 12px;
+                  color: var(--gold-light);
+                  margin-bottom: 10px;
+                "
+              ></div>
+              <div
+                id="sc-preview-toggle"
+                onclick="toggleScripturePreview()"
+                style="
+                  color: var(--text-light);
+                  font-size: 11px;
+                  cursor: pointer;
+                  margin-bottom: 4px;
+                "
+              >
+                ▶ 슬라이드 분할 미리보기
+              </div>
+              <div
+                id="sc-slide-preview"
+                style="display: none; flex-direction: column; gap: 8px"
+              ></div>
+              <div
+                id="sc-preview-close"
+                onclick="toggleScripturePreview()"
+                style="
+                  display: none;
+                  color: var(--text-light);
+                  font-size: 11px;
+                  cursor: pointer;
+                  margin-top: 6px;
+                "
+              >
+                접기
+              </div>
+            </div>
+
+            <div
+              style="
+                margin-top: 20px;
+                border-top: 1px solid var(--dark3);
+                padding-top: 16px;
+              "
+            >
+              <div
+                style="
+                  font-size: 13px;
+                  color: var(--gold-light);
+                  font-weight: 600;
+                  margin-bottom: 10px;
+                "
+              >
+                ➕ 추가 구절
+                <span
+                  style="
+                    color: var(--text-light);
+                    font-weight: 400;
+                    font-size: 11px;
+                  "
+                  >(옵션)</span
+                >
+              </div>
+              <p
+                class="section-hint"
+                style="margin-top: 0; margin-bottom: 10px"
+              >
+                구절 템플릿 슬라이드와 성경 범위를 입력 후 추가 버튼으로
+                등록하세요. 시작 슬라이드 없이 바로 구절이 채워집니다.
+              </p>
+
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: 0.8fr 1.2fr 0.7fr 0.7fr 0.7fr auto;
+                  gap: 8px;
+                  align-items: end;
+                "
+              >
+                <div>
+                  <label style="font-size: 11px">슬라이드 번호</label>
+                  <input
+                    type="number"
+                    id="ev-slide-idx"
+                    placeholder="8"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label style="font-size: 11px">책 (약어)</label>
+                  <div style="position: relative">
+                    <input
+                      type="text"
+                      id="ev-book"
+                      placeholder="요, 롬, 시"
+                      autocomplete="off"
+                      oninput="onScriptureBookInput(this.value, 'ev-book-dropdown', 'ev-book-status')"
+                    />
+                    <div
+                      id="ev-book-dropdown"
+                      style="
+                        display: none;
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        right: 0;
+                        z-index: 100;
+                        background: var(--dark2);
+                        border: 1px solid #4a4020;
+                        border-radius: 8px;
+                        max-height: 180px;
+                        overflow-y: auto;
+                        margin-top: 2px;
+                      "
+                    ></div>
+                  </div>
+                  <div
+                    class="path-status"
+                    id="ev-book-status"
+                    style="height: 14px"
+                  ></div>
+                </div>
+                <div>
+                  <label style="font-size: 11px">장</label>
+                  <input
+                    type="number"
+                    id="ev-chapter"
+                    placeholder="3"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label style="font-size: 11px">시작 절</label>
+                  <input
+                    type="number"
+                    id="ev-verse-start"
+                    placeholder="1"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label style="font-size: 11px">끝 절</label>
+                  <input
+                    type="number"
+                    id="ev-verse-end"
+                    placeholder="5"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <button
+                    class="btn btn-outline btn-sm"
+                    style="white-space: nowrap; margin-bottom: 2px"
+                    onclick="addExtraVerse()"
+                  >
+                    📖 추가
+                  </button>
+                </div>
+              </div>
+              <div
+                id="ev-add-status"
+                style="
+                  font-size: 12px;
+                  color: var(--text-light);
+                  margin-top: 6px;
+                  height: 16px;
+                "
+              ></div>
+
+              <div
+                id="ev-list"
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 8px;
+                  margin-top: 10px;
+                "
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="generate-alert"></div>
+        <div class="loading" id="gen-loading">
+          <div class="spinner"></div>
+          <p style="margin-top: 10px; color: var(--text-light)">
+            PPT 생성 중...
+          </p>
+        </div>
+        <button class="btn btn-generate" onclick="generatePPT()">
+          ✨ PPT 생성하기
+        </button>
+      </div>
+
+      <div id="tab-settings" class="tab-panel">
+        <div class="card">
+          <div class="card-title">기본 경로 설정</div>
+          <p class="section-hint">
+            자주 사용하는 경로를 저장해두면 매번 입력하지 않아도 돼요.
+          </p>
+
+          <label>찬송가 폴더 경로</label>
+          <div class="path-input-row">
+            <input
+              type="text"
+              id="cfg-hymn-folder"
+              placeholder="C:\Church\찬송가"
+            />
+            <button class="btn btn-outline btn-sm" onclick="checkHymnFolder()">
+              확인
+            </button>
+          </div>
+          <div class="path-status" id="cfg-hymn-status"></div>
+
+          <label>기본 템플릿 파일 경로</label>
+          <div class="path-input-row">
+            <input
+              type="text"
+              id="cfg-template"
+              placeholder="C:\Church\template.pptx"
+            />
+            <button class="btn btn-outline btn-sm" onclick="checkTemplate()">
+              확인
+            </button>
+          </div>
+          <div class="path-status" id="cfg-template-status"></div>
+
+          <div class="sep"></div>
+
+          <label>기본 찬송가 슬롯 설정</label>
+          <p class="section-hint">
+            매주 같은 위치에 찬송가를 넣는다면 여기서 고정 슬롯을
+            설정해두세요.<br />설정 저장 후 "PPT 생성" 탭에 자동으로
+            불러와집니다.
+          </p>
+
+          <div
+            id="cfg-slot-list"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 8px;
+              margin-top: 10px;
+            "
+          ></div>
+
+          <div class="add-slot-row">
+            <div style="flex: 1">
+              <input
+                type="text"
+                id="cfg-new-slot-name"
+                placeholder="슬롯 이름 (예: 1부찬양)"
+              />
+            </div>
+            <div>
+              <input
+                type="number"
+                id="cfg-new-slot-after"
+                placeholder="이후 슬라이드 번호"
+                min="1"
+                style="width: 130px"
+              />
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="addCfgSlot()">
+              + 추가
+            </button>
+          </div>
+
+          <button
+            class="btn btn-gold"
+            style="margin-top: 16px; width: 100%"
+            onclick="saveConfig()"
+          >
+            💾 설정 저장
+          </button>
+          <div id="cfg-alert" style="margin-top: 10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <script defer src="/static/js/service.js"></script>
+    <script defer src="/static/js/app.js"></script>
+  </body>
+</html>
