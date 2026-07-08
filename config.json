@@ -2,6 +2,14 @@
   "hymn_folder": "R:\\교회\\새찬송가 wide",
   "hymn_slots": [
     {
+      "name": "예배 전 1",
+      "after_slide_index": 0
+    },
+    {
+      "name": "예배 전 2",
+      "after_slide_index": 0
+    },
+    {
       "after_slide_index": 1,
       "name": "예배 시작"
     },
@@ -10,16 +18,8 @@
       "name": "사도신경 후"
     },
     {
-      "name": "예배 전",
-      "after_slide_index": 0
-    },
-    {
       "name": "설교 후",
       "after_slide_index": 14
-    },
-    {
-      "name": "예배 전 2",
-      "after_slide_index": 0
     }
   ],
   "template_file": "R:\\교회\\예배 PPT\\2026\\TEMPLATE2.pptx"
