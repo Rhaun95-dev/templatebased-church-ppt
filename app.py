@@ -9,8 +9,7 @@ import io, zipfile
 from datetime import date, timedelta
 import sys
 import os
-import win32com.client
-import pythoncom
+import subprocess
 
 
 
@@ -185,77 +184,38 @@ def upload_hymn():
     f = request.files.get("file")
 
     if not f:
-        return jsonify({"error": "파일이 없습니다"})
+        return jsonify({"error": "파일이 없습니다"}), 400
 
-    filename = f.filename.lower()
+    original_name = f.filename
+    ext = os.path.splitext(original_name.lower())[1]
 
-    allowed_exts = (".ppt", ".pptx")
+    if ext not in [".ppt", ".pptx"]:
+        return jsonify({
+            "error": "ppt 또는 pptx 파일만 업로드 가능합니다"
+        }), 400
 
-    if not filename.endswith(allowed_exts):
-        return jsonify({"error": "ppt 또는 pptx 파일만 업로드 가능합니다"})
-
-    ext = os.path.splitext(filename)[1]
+    save_name = uuid.uuid4().hex + ext
 
     save_path = os.path.join(
         HYMN_UPLOAD_DIR,
-        uuid.uuid4().hex + ext
+        save_name
     )
 
     f.save(save_path)
 
     final_path = save_path
 
-    # ppt면 자동 변환
+    # ppt → pptx 변환
     if ext == ".ppt":
         final_path = convert_ppt_to_pptx(save_path)
 
+        # 원본 ppt 삭제
+        os.remove(save_path)
+
     return jsonify({
-        "upload_path": final_path,
-        "display_name": f.filename
+        "upload_path": os.path.basename(final_path),
+        "display_name": original_name
     })
-
-def convert_ppt_to_pptx(ppt_path):
-    powerpoint = None
-    presentation = None
-
-    try:
-        # COM 초기화
-        pythoncom.CoInitialize()
-
-        powerpoint = win32com.client.Dispatch("PowerPoint.Application")
-        powerpoint.Visible = 1
-
-        abs_path = os.path.abspath(ppt_path)
-
-        presentation = powerpoint.Presentations.Open(
-            abs_path,
-            WithWindow=False
-        )
-
-        pptx_path = os.path.splitext(abs_path)[0] + ".pptx"
-
-        # 24 = pptx format
-        presentation.SaveAs(pptx_path, 24)
-
-        return pptx_path
-
-    finally:
-        try:
-            if presentation:
-                presentation.Close()
-        except:
-            pass
-
-        try:
-            if powerpoint:
-                powerpoint.Quit()
-        except:
-            pass
-
-        try:
-            pythoncom.CoUninitialize()
-        except:
-            pass
             
 @app.route('/')
 def index():
@@ -538,9 +498,14 @@ def generate():
                 continue
             # 업로드 파일 우선, 없으면 번호로 검색
             if slot.get("upload_path"):
-                hymn_file = slot["upload_path"]
+                hymn_file = os.path.join(
+                    HYMN_UPLOAD_DIR,
+                    slot["upload_path"]
+                )
+
                 if not os.path.exists(hymn_file):
                     continue
+
             elif slot.get("hymn_number"):
                 hymn_file = find_hymn_file(hymn_folder, slot["hymn_number"])
                 if not hymn_file:
@@ -614,6 +579,7 @@ def generate():
                 template_idx = task["template_raw"] + offset
 
                 prs = Presentation(work_path)
+
                 sl = prs.slides[template_idx]
                 set_slide_text_bibel(sl, pairs[0])
                 add_chapter_title_text(sl, f"{task['book_name']} {task['chapter']}장")
@@ -667,6 +633,8 @@ def generate():
                         # ev[1+]: 검은 슬라이드 삽입 → template으로 pairs 복제 삽입
                         # 1) 검은 슬라이드를 cur_tmpl 바로 뒤에 삽입
                         prs = Presentation(work_path)
+
+
                         blank_layout = prs.slide_layouts[6]
                         new_slide = prs.slides.add_slide(blank_layout)
                         new_slide.background.fill.solid()
@@ -698,13 +666,6 @@ def generate():
             elif t == "hymn":
                 hymn_file = task["hymn_file"]
                 n_slides = task["n_slides"]
-       
-                # w, h = get_slide_size(hymn_file)
-
-                # prs = Presentation(work_path)
-                # prs.slide_width = w
-                # prs.slide_height = h
-                # prs.save(work_path)
 
                 hymn_fd, hymn_tmp = tempfile.mkstemp(suffix=".pptx")
                 os.close(hymn_fd)
@@ -749,6 +710,44 @@ def generate():
             except:
                 pass
         return jsonify({"error": str(e), "trace": traceback.format_exc()})
+
+def convert_ppt_to_pptx(ppt_path):
+    """
+    LibreOffice headless를 이용한 ppt -> pptx 변환
+    """
+
+    input_dir = os.path.dirname(ppt_path)
+
+    output_path = os.path.splitext(ppt_path)[0] + ".pptx"
+
+    try:
+        result = subprocess.run(
+            [
+                "libreoffice",
+                "--headless",
+                "--convert-to",
+                "pptx",
+                "--outdir",
+                input_dir,
+                ppt_path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            raise Exception(
+                result.stderr.decode("utf-8", errors="ignore")
+            )
+
+        if not os.path.exists(output_path):
+            raise Exception("변환된 pptx 파일이 생성되지 않았습니다")
+
+        return output_path
+
+    except Exception as e:
+        raise Exception(f"PPT 변환 실패: {str(e)}")
 
 
 # ── Core ZIP-level slide copy ─────────────────
@@ -830,6 +829,77 @@ def get_slide_size(pptx_path):
     prs = Presentation(pptx_path)
     return prs.slide_width, prs.slide_height
 
+def get_ppt_size(pptx_path):
+    with zipfile.ZipFile(pptx_path) as zf:
+        xml = _read_xml(
+            zf,
+            "ppt/presentation.xml"
+        )
+
+        sldSz = xml.find(
+            qn("p:sldSz")
+        )
+
+        return (
+            int(sldSz.get("cx")),
+            int(sldSz.get("cy"))
+        )
+def resize_slide_xml(
+    slide_xml,
+    src_w,
+    src_h,
+    dst_w,
+    dst_h
+):
+
+    sx = dst_w / src_w
+    sy = dst_h / src_h
+
+
+    for xfrm in slide_xml.xpath(
+        ".//p:spPr/a:xfrm",
+        namespaces=_NSMAP
+    ):
+
+        off = xfrm.find(
+            qn("a:off")
+        )
+
+        ext = xfrm.find(
+            qn("a:ext")
+        )
+
+        if off is not None:
+            x = int(off.get("x"))
+            y = int(off.get("y"))
+
+            off.set(
+                "x",
+                str(int(x*sx))
+            )
+            off.set(
+                "y",
+                str(int(y*sy))
+            )
+
+
+        if ext is not None:
+
+            cx = int(ext.get("cx"))
+            cy = int(ext.get("cy"))
+
+            ext.set(
+                "cx",
+                str(int(cx*sx))
+            )
+
+            ext.set(
+                "cy",
+                str(int(cy*sy))
+            )
+
+
+    return slide_xml
 def copy_slide_from_file_zip(src_path, src_slide_index, dst_path, insert_after):
     out_fd, out_path = tempfile.mkstemp(suffix=".pptx")
     os.close(out_fd)
@@ -955,11 +1025,38 @@ def copy_slide_from_file_zip(src_path, src_slide_index, dst_path, insert_after):
                 "ppt/presentation.xml",
                 "ppt/_rels/presentation.xml.rels",
                 "[Content_Types].xml",
+                new_slide_path,
+                new_rels_path,
             }
+
             for name in dst_zf.namelist():
                 if name not in skip:
-                    out_zf.writestr(name, dst_zf.read(name))
-            out_zf.writestr(new_slide_path, src_zf.read(src_slide_path))
+                    out_zf.writestr(
+                        name,
+                        dst_zf.read(name)
+                    )
+
+            slide_xml = _read_xml(
+                src_zf,
+                src_slide_path
+            )
+
+            src_w, src_h = get_ppt_size(src_path)
+            dst_w, dst_h = get_ppt_size(dst_path)
+
+            slide_xml = resize_slide_xml(
+                slide_xml,
+                src_w,
+                src_h,
+                dst_w,
+                dst_h
+            )
+
+            out_zf.writestr(
+                new_slide_path,
+                _xml_bytes(slide_xml)
+            )
+
             out_zf.writestr(new_rels_path, _xml_bytes(new_rels_root))
             for dst_name, fb in extra_files.items():
                 if dst_name not in dst_zf.namelist():
