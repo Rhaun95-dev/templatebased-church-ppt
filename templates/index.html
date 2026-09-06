@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
@@ -272,7 +272,13 @@
                     id="sc-book"
                     placeholder="예: 요, 롬, 시"
                     autocomplete="off"
-                    oninput="onScriptureBookInput(this.value, 'sc-book-dropdown', 'sc-book-status')"
+                    oninput="
+                      onScriptureBookInput(
+                        this.value,
+                        'sc-book-dropdown',
+                        'sc-book-status',
+                      )
+                    "
                   />
                   <div
                     id="sc-book-dropdown"
@@ -297,6 +303,7 @@
               <div>
                 <label>장</label>
                 <input type="number" id="sc-chapter" placeholder="3" min="1" />
+                <div class="path-status"></div>
               </div>
               <div>
                 <label>시작 절</label>
@@ -306,15 +313,17 @@
                   placeholder="16"
                   min="1"
                 />
+                <div class="path-status"></div>
               </div>
               <div>
                 <label>끝 절</label>
                 <input
                   type="number"
                   id="sc-verse-end"
-                  placeholder="17"
+                  placeholder="17 (선택)"
                   min="1"
                 />
+                <div class="path-status"></div>
               </div>
             </div>
 
@@ -428,6 +437,7 @@
                     placeholder="8"
                     min="1"
                   />
+                  <div class="path-status" style="height: 14px"></div>
                 </div>
                 <div>
                   <label style="font-size: 11px">책 (약어)</label>
@@ -437,7 +447,13 @@
                       id="ev-book"
                       placeholder="요, 롬, 시"
                       autocomplete="off"
-                      oninput="onScriptureBookInput(this.value, 'ev-book-dropdown', 'ev-book-status')"
+                      oninput="
+                        onScriptureBookInput(
+                          this.value,
+                          'ev-book-dropdown',
+                          'ev-book-status',
+                        )
+                      "
                     />
                     <div
                       id="ev-book-dropdown"
@@ -471,6 +487,7 @@
                     placeholder="3"
                     min="1"
                   />
+                  <div class="path-status" style="height: 14px"></div>
                 </div>
                 <div>
                   <label style="font-size: 11px">시작 절</label>
@@ -480,15 +497,17 @@
                     placeholder="1"
                     min="1"
                   />
+                  <div class="path-status" style="height: 14px"></div>
                 </div>
                 <div>
                   <label style="font-size: 11px">끝 절</label>
                   <input
                     type="number"
                     id="ev-verse-end"
-                    placeholder="5"
+                    placeholder="5 (선택)"
                     min="1"
                   />
+                  <div class="path-status" style="height: 14px"></div>
                 </div>
                 <div>
                   <button
@@ -498,6 +517,7 @@
                   >
                     📖 추가
                   </button>
+                  <div class="path-status" style="height: 14px"></div>
                 </div>
               </div>
               <div
