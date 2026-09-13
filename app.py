@@ -698,13 +698,9 @@ def generate():
             elif t == "hymn":
                 hymn_file = task["hymn_file"]
                 n_slides = task["n_slides"]
-       
-                # w, h = get_slide_size(hymn_file)
 
-                # prs = Presentation(work_path)
-                # prs.slide_width = w
-                # prs.slide_height = h
-                # prs.save(work_path)
+                # 대상(현재 작업 중인) 프레젠테이션의 실제 슬라이드 크기(EMU)
+                dst_width, dst_height = get_slide_size(work_path)
 
                 hymn_fd, hymn_tmp = tempfile.mkstemp(suffix=".pptx")
                 os.close(hymn_fd)
@@ -712,6 +708,15 @@ def generate():
 
                 for i in range(n_slides):
                     new_tmp = _embed_slide_background(hymn_tmp, i)
+                    if new_tmp:
+                        os.unlink(hymn_tmp)
+                        hymn_tmp = new_tmp
+
+                # 찬송가 원본의 실제 슬라이드 크기(EMU)가 대상과 다르면(같은 16:9라도
+                # 절대 크기가 다를 수 있음) 도형 좌표를 대상 크기 비율로 스케일해서
+                # 내용이 작게 붙는 문제를 방지
+                for i in range(n_slides):
+                    new_tmp = _scale_slide_shapes(hymn_tmp, i, dst_width, dst_height)
                     if new_tmp:
                         os.unlink(hymn_tmp)
                         hymn_tmp = new_tmp
@@ -829,6 +834,90 @@ EXT_MIME = {
 def get_slide_size(pptx_path):
     prs = Presentation(pptx_path)
     return prs.slide_width, prs.slide_height
+
+
+def _get_zip_slide_size(zf):
+    """열려 있는 zip 파일 객체에서 presentation.xml의 sldSz(width, height) EMU 값을 읽는다."""
+    prs_xml = _read_xml(zf, "ppt/presentation.xml")
+    sldSz = prs_xml.find(qn("p:sldSz"))
+    if sldSz is None:
+        return None, None
+    return int(sldSz.get("cx")), int(sldSz.get("cy"))
+
+
+def _scale_slide_shapes(src_path: str, slide_index: int, dst_width, dst_height):
+    """
+    src_path pptx의 slide_index 슬라이드 도형들을, 원본 자신의 슬라이드 크기(sldSz) 기준에서
+    대상(dst_width, dst_height) 크기 기준으로 비율에 맞게 스케일한 새 임시파일 경로를 반환.
+    원본과 대상 크기가 (거의) 같으면 스케일할 필요가 없으므로 None을 반환한다.
+
+    ZIP-레벨 raw XML 복사이기 때문에, 같은 16:9 비율이어도 원본과 대상의 절대 크기(EMU)가
+    다르면 도형이 원래 크기 그대로 붙어 작게 보이는 문제가 생긴다 — 이를 방지하기 위한 함수.
+    그룹 도형은 최상위 xfrm(off/ext)만 스케일하면 내부 좌표(chOff/chExt)는 비율이 자동 유지된다.
+    """
+    ns_p = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    ns_a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+    with zipfile.ZipFile(src_path, "r") as zf:
+        src_width, src_height = _get_zip_slide_size(zf)
+        if not src_width or not src_height or not dst_width or not dst_height:
+            return None
+        if abs(src_width - dst_width) < 1000 and abs(src_height - dst_height) < 1000:
+            return None  # 이미 거의 동일한 크기 → 스케일 불필요
+
+        scale_x = dst_width / src_width
+        scale_y = dst_height / src_height
+
+        slide_paths = _slide_paths_ordered(zf)
+        if slide_index >= len(slide_paths):
+            return None
+        slide_path = slide_paths[slide_index]
+        slide_xml = _read_xml(zf, slide_path)
+
+        cSld = slide_xml.find(f"{{{ns_p}}}cSld")
+        spTree = cSld.find(f"{{{ns_p}}}spTree") if cSld is not None else None
+        if spTree is None:
+            return None
+
+        def scale_xfrm(xfrm):
+            off = xfrm.find(f"{{{ns_a}}}off")
+            ext = xfrm.find(f"{{{ns_a}}}ext")
+            if off is not None:
+                off.set("x", str(round(int(off.get("x", 0)) * scale_x)))
+                off.set("y", str(round(int(off.get("y", 0)) * scale_y)))
+            if ext is not None:
+                ext.set("cx", str(round(int(ext.get("cx", 0)) * scale_x)))
+                ext.set("cy", str(round(int(ext.get("cy", 0)) * scale_y)))
+
+        # 최상위 도형들만 스케일 (그룹 내부 좌표는 그룹 자체 xfrm 스케일로 자동 유지됨)
+        for child in spTree:
+            tag = etree.QName(child).localname
+            if tag in ("sp", "pic", "cxnSp", "grpSp"):
+                spPr = child.find(f"{{{ns_p}}}spPr")
+                if spPr is None:
+                    spPr = child.find(f"{{{ns_p}}}grpSpPr")
+                if spPr is None:
+                    continue
+                xfrm = spPr.find(f"{{{ns_a}}}xfrm")
+                if xfrm is not None:
+                    scale_xfrm(xfrm)
+            elif tag == "graphicFrame":
+                xfrm = child.find(f"{{{ns_p}}}xfrm")
+                if xfrm is not None:
+                    scale_xfrm(xfrm)
+
+        out_fd, out_path = tempfile.mkstemp(suffix=".pptx")
+        os.close(out_fd)
+        with zipfile.ZipFile(src_path, "r") as zf2, zipfile.ZipFile(
+            out_path, "w", zipfile.ZIP_DEFLATED
+        ) as out_zf:
+            for name in zf2.namelist():
+                if name == slide_path:
+                    out_zf.writestr(name, _xml_bytes(slide_xml))
+                else:
+                    out_zf.writestr(name, zf2.read(name))
+
+    return out_path
 
 def copy_slide_from_file_zip(src_path, src_slide_index, dst_path, insert_after):
     out_fd, out_path = tempfile.mkstemp(suffix=".pptx")
