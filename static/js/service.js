@@ -25,7 +25,7 @@ function createGenSlot(s, i) {
     after_slide_index: s.after_slide_index,
     hymn_number: "",
     hymn_title: "",
-    upload_path: null,
+    upload_file: null,
     skip: false,
   };
 }
@@ -522,31 +522,22 @@ function renderSlots() {
 async function uploadHymnFile(idx, input) {
   const file = input.files[0];
   if (!file) return;
-  const formData = new FormData();
-  formData.append("file", file);
-  try {
-    const res = await fetch("/api/upload-hymn", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
-    if (data.error) {
-      alert("업로드 실패: " + data.error);
-      return;
-    }
-    state.genSlots[idx].upload_path = data.upload_path;
-    state.genSlots[idx].hymn_number = "";
-    state.genSlots[idx].hymn_title = "📎 " + data.display_name;
-    renderSlots();
-  } catch (e) {
-    alert("업로드 오류: " + e.message);
+  const name = file.name.toLowerCase();
+  if (!name.endsWith(".ppt") && !name.endsWith(".pptx")) {
+    alert("업로드 실패: ppt 또는 pptx 파일만 업로드 가능합니다");
+    return;
   }
+  // 파일은 브라우저에만 보관하고, PPT 생성 요청 시 함께 전송
+  state.genSlots[idx].upload_file = file;
+  state.genSlots[idx].hymn_number = "";
+  state.genSlots[idx].hymn_title = "📎 " + file.name;
+  renderSlots();
 }
 
 async function onHymnNumberInput(idx, value) {
   state.genSlots[idx].hymn_number = value;
   state.genSlots[idx].hymn_title = "";
-  state.genSlots[idx].upload_path = null;
+  state.genSlots[idx].upload_file = null;
   clearTimeout(hymnSearchTimers[idx]);
   if (!value) {
     renderSlots();
@@ -681,16 +672,24 @@ async function generatePPT() {
   $("generate-alert").innerHTML = "";
 
   try {
+    const formData = new FormData();
     const payload = {
       template_file: templateFile,
       hymn_folder: state.config.hymn_folder,
-      hymn_slots: state.genSlots.map((s) => ({
-        name: s.name,
-        after_slide_index: s.after_slide_index,
-        hymn_number: s.hymn_number,
-        upload_path: s.upload_path || null,
-        skip: s.skip,
-      })),
+      hymn_slots: state.genSlots.map((s, i) => {
+        let upload_key = null;
+        if (s.upload_file) {
+          upload_key = "hymn_file_" + i;
+          formData.append(upload_key, s.upload_file);
+        }
+        return {
+          name: s.name,
+          after_slide_index: s.after_slide_index,
+          hymn_number: s.hymn_number,
+          upload_key,
+          skip: s.skip,
+        };
+      }),
       choir: choirEnabled
         ? {
             title_slide_index: titleIdx ? parseInt(titleIdx) - 1 : null,
@@ -721,10 +720,10 @@ async function generatePPT() {
       })),
     };
 
+    formData.append("payload", JSON.stringify(payload));
     const res = await fetch("/api/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: formData,
     });
 
     if (res.headers.get("content-type")?.includes("json")) {
