@@ -1,0 +1,12 @@
+name: keepalive
+# Pings the deployed app so Render and Supabase do not idle out.
+# Requires the repository variable APP_URL (no secrets needed).
+on:
+  schedule:
+    - cron: "0 3 */3 * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 60 "${{ vars.APP_URL }}/api/health"

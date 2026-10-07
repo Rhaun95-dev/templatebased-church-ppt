@@ -26,6 +26,12 @@ def index():
     return render_template("index.html")
 
 
+@bp.route("/api/health")
+def health():
+    get_storage().get_config()  # 스토리지 접근 실패 시 AppError(503) → keep-alive 겸용
+    return jsonify({"ok": True})
+
+
 # ── Config ────────────────────────────────────
 
 

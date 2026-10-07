@@ -1,0 +1,6 @@
+flask
+python-pptx
+lxml
+requests
+gunicorn
+pywin32; sys_platform == 'win32'

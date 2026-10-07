@@ -11,7 +11,7 @@ COOKIE = "session_token"
 TOKEN_MAX_AGE = 12 * 3600
 MAX_FAILURES = 5
 WINDOW_SECONDS = 300
-PUBLIC = {"/api/login", "/api/logout", "/api/session"}
+PUBLIC = {"/api/login", "/api/logout", "/api/session", "/api/health"}
 
 bp = Blueprint("auth", __name__)
 _failures = defaultdict(deque)

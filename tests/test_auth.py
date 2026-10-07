@@ -65,6 +65,23 @@ class AuthTests(unittest.TestCase):
     def test_index_page_is_public(self):
         self.assertEqual(client().get("/").status_code, 200)
 
+    def test_health_is_public_and_checks_storage(self):
+        app = create_app({"TESTING": True, "APP_PASSWORD": "pw", "SECRET_KEY": "k" * 32})
+        app.extensions["storage"] = mock.Mock(get_config=lambda: {})
+        r = app.test_client().get("/api/health")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json(), {"ok": True})
+
+    def test_health_503_when_storage_down(self):
+        from church_ppt.errors import StorageUnavailable
+
+        def boom():
+            raise StorageUnavailable("down")
+
+        app = create_app({"TESTING": True, "APP_PASSWORD": "pw", "SECRET_KEY": "k" * 32})
+        app.extensions["storage"] = mock.Mock(get_config=boom)
+        self.assertEqual(app.test_client().get("/api/health").status_code, 503)
+
 
 if __name__ == "__main__":
     unittest.main()
