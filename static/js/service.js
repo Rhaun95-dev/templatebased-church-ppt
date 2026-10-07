@@ -4,19 +4,6 @@
  * ══════════════════════════════════════════════════
  */
 
-// DOM 조회 단축 헬퍼 (app.js에서도 공용으로 사용)
-const $ = (id) => document.getElementById(id);
-
-// JSON POST 요청 공용 헬퍼
-async function postJSON(url, body) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
-
 // 설정에 저장된 슬롯 정보로 '생성' 탭용 슬롯 객체 생성
 function createGenSlot(s, i) {
   return {
@@ -25,14 +12,13 @@ function createGenSlot(s, i) {
     after_slide_index: s.after_slide_index,
     hymn_number: "",
     hymn_title: "",
-    upload_path: null,
+    upload_file: null,
     skip: false,
   };
 }
 
 let state = {
   config: {
-    hymn_folder: "",
     template_file: "",
     hymn_slots: [],
     slide_defaults: {
@@ -63,11 +49,15 @@ let bookDropdownState = {}; // keyed by dropdownId: { matches, activeIndex, stat
 // 애플리케이션 초기 데이터 바인딩
 async function init() {
   try {
-    const res = await fetch("/api/config");
-    state.config = await res.json();
+    const s = await (await fetch("/api/session")).json();
+    if (s.auth_required && !s.authenticated) {
+      showLogin();
+      return;
+    }
 
-    if (state.config.hymn_folder)
-      $("cfg-hymn-folder").value = state.config.hymn_folder;
+    const res = await apiFetch("/api/config");
+    state.config = await res.json();
+    applyMode(state.config.mode);
 
     if (state.config.template_file) {
       $("cfg-template").value = state.config.template_file;
@@ -90,10 +80,89 @@ async function init() {
     setupBookInputKeyboardNav();
 
     // 성경 데이터 메타 정보 로드
-    const bm = await fetch("/api/bible-meta");
+    const bm = await apiFetch("/api/bible-meta");
     state.bibleMeta = await bm.json();
   } catch (e) {
     console.warn("초기 데이터 로드 실패 (Config / Bible-Meta)", e);
+  }
+}
+
+// 실행 모드(local / supabase)에 따라 템플릿 UI 전환
+function applyMode(mode) {
+  const cloud = mode === "supabase";
+  $("cfg-template-row").style.display = cloud ? "none" : "";
+  $("gen-template-row").style.display = cloud ? "none" : "";
+  $("cloud-template-box").style.display = cloud ? "block" : "none";
+  if (cloud) loadTemplateSlides();
+}
+
+// 클라우드 모드: 템플릿 업로드
+async function uploadCloudTemplate() {
+  const f = $("cloud-template-file").files[0];
+  if (!f || !/\.pptx$/i.test(f.name)) {
+    showAlertMessage("cloud-template-status", "❌ .pptx 파일을 선택하세요", "var(--red)");
+    return;
+  }
+  try {
+    const fd = new FormData();
+    fd.append("file", f);
+    const res = await apiFetch("/api/template", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      showAlertMessage("cloud-template-status", "❌ " + data.error, "var(--red)");
+      return;
+    }
+    showAlertMessage("cloud-template-status", `✓ 업로드됨 (슬라이드 ${data.total}장)`, "var(--green)");
+    loadTemplateSlides();
+  } catch (e) {
+    showAlertMessage("cloud-template-status", "❌ " + e.message, "var(--red)");
+  }
+}
+
+// 찬송가 폴더 상태를 설정 탭과 생성 탭 두 곳에 표시
+function updateHymnStatus(errorText) {
+  let text, color;
+  if (errorText) {
+    text = "❌ " + errorText;
+    color = "var(--red)";
+  } else if (HymnLibrary.ready) {
+    const extra = HymnLibrary.pptxCount - HymnLibrary.count;
+    text = `✓ 📁 ${HymnLibrary.folderName || "선택한 폴더"} — 번호 인식 ${HymnLibrary.count}곡` +
+      (extra > 0 ? ` (번호 없는 파일 ${extra}개 제외)` : "");
+    color = "var(--green)";
+  } else {
+    text = "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
+    color = "var(--text-light)";
+  }
+  showAlertMessage("hymn-lib-status", text, color);
+  showAlertMessage("hymn-banner", text, color);
+  const disp = $("cfg-hymn-folder-display");
+  if (disp) disp.value = HymnLibrary.ready ? HymnLibrary.folderName : "";
+}
+
+// 브라우저 찬송가 폴더 선택 / 복원
+async function chooseHymnFolder() {
+  try {
+    await HymnLibrary.pickFolder(() => {
+      showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--text-light)");
+      showAlertMessage("hymn-banner", "폴더 읽는 중...", "var(--text-light)");
+    });
+    updateHymnStatus(HymnLibrary.ready ? null : "이 폴더에서 '번호_제목.pptx' 파일을 찾지 못했어요");
+  } catch (e) {
+    if (e.name !== "AbortError") updateHymnStatus(e.message);
+  }
+}
+async function restoreHymnFolder() {
+  try {
+    const ok = await HymnLibrary.restore();
+    if (!ok) {
+      showAlertMessage("hymn-lib-status", "저장된 폴더가 없어요. 폴더를 선택하세요", "var(--text-light)");
+      showAlertMessage("hymn-banner", "저장된 폴더가 없어요. 폴더를 선택하세요", "var(--text-light)");
+      return;
+    }
+    updateHymnStatus();
+  } catch (e) {
+    updateHymnStatus(e.message);
   }
 }
 
@@ -399,17 +468,25 @@ function removeExtraVerse(idx) {
 
 // PPT 템플릿 정보 호출
 async function loadTemplateSlides() {
-  const path = $("gen-template").value.trim();
-  if (!path) return;
+  const cloud = state.config.mode === "supabase";
+  const path = cloud ? "" : $("gen-template").value.trim();
+  if (!path && !cloud) return;
 
   const status = $("gen-template-status");
   status.textContent = "불러오는 중...";
   status.style.color = "var(--text-light)";
 
-  const data = await postJSON("/api/template-info", { template_file: path });
+  let data;
+  try {
+    data = await postJSON("/api/template-info", cloud ? {} : { template_file: path });
+  } catch (e) {
+    showAlertMessage("gen-template-status", "❌ " + e.message, "var(--red)");
+    return;
+  }
 
   if (data.error) {
-    showAlertMessage("gen-template-status", "❌ " + data.error, "var(--red)");
+    // 클라우드에서 아직 템플릿을 올리기 전이면 조용히 안내만
+    showAlertMessage("gen-template-status", cloud ? "템플릿을 업로드하세요" : "❌ " + data.error, cloud ? "var(--text-light)" : "var(--red)");
     return;
   }
 
@@ -522,48 +599,42 @@ function renderSlots() {
 async function uploadHymnFile(idx, input) {
   const file = input.files[0];
   if (!file) return;
-  const formData = new FormData();
-  formData.append("file", file);
-  try {
-    const res = await fetch("/api/upload-hymn", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
-    if (data.error) {
-      alert("업로드 실패: " + data.error);
-      return;
-    }
-    state.genSlots[idx].upload_path = data.upload_path;
-    state.genSlots[idx].hymn_number = "";
-    state.genSlots[idx].hymn_title = "📎 " + data.display_name;
-    renderSlots();
-  } catch (e) {
-    alert("업로드 오류: " + e.message);
+  const name = file.name.toLowerCase();
+  if (!name.endsWith(".ppt") && !name.endsWith(".pptx")) {
+    alert("업로드 실패: ppt 또는 pptx 파일만 업로드 가능합니다");
+    return;
   }
+  // 파일은 브라우저에만 보관하고, PPT 생성 요청 시 함께 전송
+  state.genSlots[idx].upload_file = file;
+  state.genSlots[idx].hymn_number = "";
+  state.genSlots[idx].hymn_title = "📎 " + file.name;
+  renderSlots();
 }
 
 async function onHymnNumberInput(idx, value) {
   state.genSlots[idx].hymn_number = value;
   state.genSlots[idx].hymn_title = "";
-  state.genSlots[idx].upload_path = null;
+  state.genSlots[idx].upload_file = null;
   clearTimeout(hymnSearchTimers[idx]);
   if (!value) {
     renderSlots();
     return;
   }
   hymnSearchTimers[idx] = setTimeout(async () => {
-    const hymnFolder = state.config.hymn_folder;
-    if (!hymnFolder) {
-      state.genSlots[idx].hymn_title = "설정에서 찬송가 폴더를 지정하세요";
-      renderSlots();
-      return;
+    const slot = state.genSlots[idx];
+    if (!HymnLibrary.ready) {
+      slot.hymn_title = "찬송가 폴더를 먼저 선택하세요";
+    } else {
+      const hit = HymnLibrary.find(value);
+      slot.hymn_title = hit ? hit.title : "없음";
+      if (!hit) console.warn("찬송가 없음:", value, "인덱스:", HymnLibrary.count, "곡");
+      try {
+        const file = hit ? await hit.getFile() : null;
+        if (slot.hymn_number === value) slot.upload_file = file;  // 그 사이 번호가 바뀌었으면 버린다
+      } catch (e) {
+        slot.hymn_title = "❌ 파일을 읽지 못했어요";
+      }
     }
-    const data = await postJSON("/api/search-hymn", {
-      folder: hymnFolder,
-      number: parseInt(value),
-    });
-    state.genSlots[idx].hymn_title = data.found ? data.title : "없음";
     renderSlots();
   }, 400);
 }
@@ -630,8 +701,9 @@ function autoPreviewChoir() {
 
 // 통합 고기능 PPT 생성 요청 처리
 async function generatePPT() {
-  const templateFile = $("gen-template").value.trim();
-  if (!templateFile) {
+  const cloud = state.config.mode === "supabase";
+  const templateFile = cloud ? "" : $("gen-template").value.trim();
+  if (!cloud && !templateFile) {
     showAlert("generate-alert", "템플릿 파일 경로를 입력해주세요", "error");
     return;
   }
@@ -681,16 +753,23 @@ async function generatePPT() {
   $("generate-alert").innerHTML = "";
 
   try {
+    const formData = new FormData();
     const payload = {
-      template_file: templateFile,
-      hymn_folder: state.config.hymn_folder,
-      hymn_slots: state.genSlots.map((s) => ({
-        name: s.name,
-        after_slide_index: s.after_slide_index,
-        hymn_number: s.hymn_number,
-        upload_path: s.upload_path || null,
-        skip: s.skip,
-      })),
+      ...(cloud ? {} : { template_file: templateFile }),
+      hymn_slots: state.genSlots.map((s, i) => {
+        let upload_key = null;
+        if (s.upload_file) {
+          upload_key = "hymn_file_" + i;
+          formData.append(upload_key, s.upload_file);
+        }
+        return {
+          name: s.name,
+          after_slide_index: s.after_slide_index,
+          hymn_number: s.hymn_number,
+          upload_key,
+          skip: s.skip,
+        };
+      }),
       choir: choirEnabled
         ? {
             title_slide_index: titleIdx ? parseInt(titleIdx) - 1 : null,
@@ -721,15 +800,19 @@ async function generatePPT() {
       })),
     };
 
-    const res = await fetch("/api/generate", {
+    formData.append("payload", JSON.stringify(payload));
+    const res = await apiFetch("/api/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: formData,
     });
 
     if (res.headers.get("content-type")?.includes("json")) {
       const err = await res.json();
       showAlert("generate-alert", "❌ " + err.error, "error");
+      return;
+    }
+    if (!res.ok) {
+      showAlert("generate-alert", "❌ HTTP " + res.status, "error");
       return;
     }
 
@@ -795,21 +878,6 @@ function removeCfgSlot(idx) {
   renderCfgSlots();
 }
 
-async function checkHymnFolder() {
-  const folder = $("cfg-hymn-folder").value.trim();
-  const data = await postJSON("/api/scan-hymns", { folder });
-  if (data.error) {
-    showAlertMessage("cfg-hymn-status", "❌ " + data.error, "var(--red)");
-  } else {
-    showAlertMessage(
-      "cfg-hymn-status",
-      `✓ 찬송가 ${data.hymns.length}개 발견`,
-      "var(--green)",
-    );
-    state.config.hymn_folder = folder;
-  }
-}
-
 async function checkTemplate() {
   const file = $("cfg-template").value.trim();
   const data = await postJSON("/api/template-info", { template_file: file });
@@ -826,8 +894,8 @@ async function checkTemplate() {
 }
 
 async function saveConfig() {
-  state.config.hymn_folder = $("cfg-hymn-folder").value.trim();
-  state.config.template_file = $("cfg-template").value.trim();
+  if (state.config.mode !== "supabase")
+    state.config.template_file = $("cfg-template").value.trim();
 
   // 성가대/성경구절/추가구절 슬라이드 번호 기본값 캐싱
   const readIdx = (id) => {
@@ -842,11 +910,16 @@ async function saveConfig() {
     extra_verse_slide_idx: readIdx("ev-slide-idx"),
   };
 
-  await fetch("/api/config", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(state.config),
-  });
+  try {
+    await apiFetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state.config),
+    });
+  } catch (e) {
+    showAlert("cfg-alert", "❌ " + e.message, "error");
+    return;
+  }
 
   if (state.config.template_file)
     $("gen-template").value = state.config.template_file;

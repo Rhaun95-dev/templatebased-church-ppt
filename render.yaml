@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: church-ppt-tool
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: STORAGE
+        value: supabase
+      - key: APP_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false

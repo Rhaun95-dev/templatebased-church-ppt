@@ -1,10 +1,33 @@
 # ✝ 교회 PPT 자동화 도구
 
+## 실행 모드
+
+| 모드 | 실행 | 저장소 | 비밀번호 |
+|---|---|---|---|
+| 로컬 (교회 PC) | `run.bat` / `python app.py` | 내 PC의 `config.json`과 템플릿 경로 | 없음 |
+| 클라우드 | Docker (`Dockerfile`) / Render (`render.yaml`) | Supabase Storage (비공개 버킷 `church-ppt`) | `APP_PASSWORD` |
+
+찬송가는 서버에 두지 않습니다. 브라우저에서 내 컴퓨터의 찬송가 폴더를 선택하면, 고른 곡만 생성 요청과 함께 업로드됩니다.
+
+### 환경변수
+
+| 변수 | 설명 |
+|---|---|
+| `STORAGE` | `local`(기본) 또는 `supabase` |
+| `APP_PASSWORD` | 설정하면 공유 비밀번호 로그인이 켜집니다 |
+| `SECRET_KEY` | 세션 쿠키 서명 키 (`APP_PASSWORD` 사용 시 필수) |
+| `SUPABASE_URL` | `STORAGE=supabase`일 때 필수 |
+| `SUPABASE_SERVICE_KEY` | `STORAGE=supabase`일 때 필수 (호스트 환경변수에만 저장, 저장소에 커밋 금지) |
+
+`GET /api/health`는 로그인 없이 호출할 수 있으며 스토리지 접근을 확인합니다. `.github/workflows/keepalive.yml`이 저장소 변수 `APP_URL`의 이 주소를 3일마다 호출합니다.
+
+---
+
 ## 설치 방법
 
 ### 1. Python 패키지 설치
 ```
-pip install flask python-pptx
+pip install -r requirements.txt
 ```
 
 ### 2. 실행

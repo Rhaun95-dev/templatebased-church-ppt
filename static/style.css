@@ -549,3 +549,22 @@ textarea {
   line-height: 1.7;
   white-space: pre-line;
 }
+
+/* 로그인 오버레이 */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.login-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background: var(--dark3);
+  border-radius: 12px;
+}

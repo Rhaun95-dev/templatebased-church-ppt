@@ -1,0 +1,11 @@
+.git
+.env
+.claude
+config.json
+public
+uploads
+docs
+tests
+todo
+__pycache__
+*.pyc

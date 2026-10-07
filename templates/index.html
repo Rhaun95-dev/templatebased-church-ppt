@@ -32,19 +32,34 @@
       <div id="tab-generate" class="tab-panel active">
         <div class="card">
           <div class="card-title">템플릿 파일</div>
-          <label>이번 주 템플릿 파일 경로</label>
-          <div class="path-input-row">
-            <input
-              type="text"
-              id="gen-template"
-              placeholder="C:\Church\template_2024.pptx"
-            />
-            <button
-              class="btn btn-outline btn-sm"
-              onclick="loadTemplateSlides()"
-            >
-              슬라이드 불러오기
-            </button>
+          <div id="gen-template-row">
+            <label>이번 주 템플릿 파일 경로</label>
+            <div class="path-input-row">
+              <input
+                type="text"
+                id="gen-template"
+                placeholder="C:\Church\template_2024.pptx"
+              />
+              <button
+                class="btn btn-outline btn-sm"
+                onclick="loadTemplateSlides()"
+              >
+                슬라이드 불러오기
+              </button>
+            </div>
+          </div>
+          <div id="cloud-template-box" style="display: none">
+            <label>이번 주 템플릿 파일 (.pptx)</label>
+            <div class="path-input-row">
+              <input type="file" id="cloud-template-file" accept=".pptx" />
+              <button
+                class="btn btn-outline btn-sm"
+                onclick="uploadCloudTemplate()"
+              >
+                업로드
+              </button>
+            </div>
+            <div class="path-status" id="cloud-template-status"></div>
           </div>
           <div class="path-status" id="gen-template-status"></div>
 
@@ -72,6 +87,15 @@
             각 슬롯마다 찬송가 번호를 입력하세요. 스킵하면 해당 위치는
             건너뜁니다.
           </p>
+          <div class="path-input-row" id="hymn-banner-row">
+            <div class="path-status" id="hymn-banner" style="flex: 1"></div>
+            <button class="btn btn-outline btn-sm" onclick="chooseHymnFolder()">
+              📁 폴더 선택
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="restoreHymnFolder()">
+              이전 폴더
+            </button>
+          </div>
           <div class="slot-list" id="slot-list"></div>
           <div class="add-slot-row">
             <div style="flex: 1">
@@ -562,31 +586,43 @@
             자주 사용하는 경로를 저장해두면 매번 입력하지 않아도 돼요.
           </p>
 
-          <label>찬송가 폴더 경로</label>
-          <div class="path-input-row">
-            <input
-              type="text"
-              id="cfg-hymn-folder"
-              placeholder="C:\Church\찬송가"
-            />
-            <button class="btn btn-outline btn-sm" onclick="checkHymnFolder()">
-              확인
-            </button>
+          <div id="hymn-library-box">
+            <label>찬송가 폴더 (내 컴퓨터)</label>
+            <div class="path-input-row">
+              <input
+                type="text"
+                id="cfg-hymn-folder-display"
+                readonly
+                placeholder="선택된 폴더 없음"
+              />
+              <button class="btn btn-outline btn-sm" onclick="chooseHymnFolder()">
+                📁 찬송가 폴더 선택
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="restoreHymnFolder()">
+                이전 폴더 불러오기
+              </button>
+            </div>
+            <div class="path-status" id="hymn-lib-status"></div>
+            <p class="section-hint">
+              Google Drive에서 찬송가 폴더를 한 번 내려받아 선택하세요. 선택한
+              곡만 업로드됩니다.
+            </p>
           </div>
-          <div class="path-status" id="cfg-hymn-status"></div>
 
-          <label>기본 템플릿 파일 경로</label>
-          <div class="path-input-row">
-            <input
-              type="text"
-              id="cfg-template"
-              placeholder="C:\Church\template.pptx"
-            />
-            <button class="btn btn-outline btn-sm" onclick="checkTemplate()">
-              확인
-            </button>
+          <div id="cfg-template-row">
+            <label>기본 템플릿 파일 경로</label>
+            <div class="path-input-row">
+              <input
+                type="text"
+                id="cfg-template"
+                placeholder="C:\Church\template.pptx"
+              />
+              <button class="btn btn-outline btn-sm" onclick="checkTemplate()">
+                확인
+              </button>
+            </div>
+            <div class="path-status" id="cfg-template-status"></div>
           </div>
-          <div class="path-status" id="cfg-template-status"></div>
 
           <div class="sep"></div>
 
@@ -641,6 +677,22 @@
       </div>
     </div>
 
+    <div id="login-overlay" class="login-overlay" style="display: none">
+      <form class="login-box" onsubmit="submitLogin(); return false;">
+        <h2>교회 PPT 도구</h2>
+        <input
+          id="login-password"
+          type="password"
+          placeholder="비밀번호"
+          autocomplete="current-password"
+        />
+        <button class="btn" type="submit">로그인</button>
+        <div id="login-error" class="path-status"></div>
+      </form>
+    </div>
+
+    <script defer src="/static/js/api.js"></script>
+    <script defer src="/static/js/hymn-library.js"></script>
     <script defer src="/static/js/service.js"></script>
     <script defer src="/static/js/app.js"></script>
   </body>
