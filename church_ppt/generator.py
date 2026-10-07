@@ -7,7 +7,6 @@ from datetime import date, timedelta
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 
-from .hymns import find_hymn_file
 from .pptx_zip import (
     copy_slide_from_file_zip,
     duplicate_slide_zip,
@@ -61,11 +60,11 @@ def next_sunday_filename():
 # ── 작업 목록 생성 ────────────────────────────
 
 
-def build_tasks(hymn_folder, hymn_slots, choir, scripture, extra_verses):
+def build_tasks(hymn_slots, choir, scripture, extra_verses):
     """요청 데이터를 원본 템플릿 기준 삽입 작업 목록으로 변환 (정렬됨).
 
-    hymn_slots의 각 슬롯은 업로드 파일이 있으면 "upload_file"(로컬 경로)을,
-    없으면 "hymn_number"를 가진다.
+    hymn_slots의 각 슬롯은 업로드 파일의 임시 경로 "upload_file"을 가진다.
+    "upload_file"이 없거나 비어 있으면 해당 슬롯은 건너뛴다.
     """
     tasks = []
 
@@ -160,16 +159,8 @@ def build_tasks(hymn_folder, hymn_slots, choir, scripture, extra_verses):
     for slot in hymn_slots:
         if slot.get("skip"):
             continue
-        # 업로드 파일 우선, 없으면 번호로 검색
-        if "upload_file" in slot:
-            hymn_file = slot["upload_file"]
-            if not hymn_file:
-                continue
-        elif slot.get("hymn_number"):
-            hymn_file = find_hymn_file(hymn_folder, slot["hymn_number"])
-            if not hymn_file:
-                continue
-        else:
+        hymn_file = slot.get("upload_file")
+        if not hymn_file:
             continue
         hymn_prs_tmp = Presentation(hymn_file)
         n_hymn_slides = len(hymn_prs_tmp.slides)
@@ -372,9 +363,9 @@ _HANDLERS = {
 }
 
 
-def generate_presentation(template_file, hymn_folder, hymn_slots, choir, scripture, extra_verses):
+def generate_presentation(template_file, hymn_slots, choir, scripture, extra_verses):
     """템플릿 복사본에 모든 작업을 적용하고 결과 pptx 바이트를 반환"""
-    tasks = build_tasks(hymn_folder, hymn_slots, choir, scripture, extra_verses)
+    tasks = build_tasks(hymn_slots, choir, scripture, extra_verses)
 
     work_fd, work_path = tempfile.mkstemp(suffix=".pptx")
     os.close(work_fd)

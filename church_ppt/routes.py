@@ -11,7 +11,7 @@ from pptx import Presentation
 from .bible import load_bible_meta, lookup_verses
 from .config import load_config, save_config
 from .generator import generate_presentation, next_sunday_filename
-from .hymns import list_hymns, search_hymn as find_hymn_by_number
+from .errors import AppError
 from .ppt_convert import convert_ppt_to_pptx
 
 bp = Blueprint("main", __name__)
@@ -39,30 +39,6 @@ def get_config():
 def set_config():
     save_config(request.json)
     return jsonify({"ok": True})
-
-
-# ── Hymns ─────────────────────────────────────
-
-
-@bp.route("/api/scan-hymns", methods=["POST"])
-def scan_hymns():
-    folder = request.json.get("folder", "")
-    if not folder or not os.path.exists(folder):
-        return jsonify({"error": "폴더를 찾을 수 없어요", "hymns": []})
-    return jsonify({"hymns": list_hymns(folder)})
-
-
-@bp.route("/api/search-hymn", methods=["POST"])
-def search_hymn():
-    folder = request.json.get("folder", "")
-    number = request.json.get("number")
-    if not folder or not os.path.exists(folder):
-        return jsonify({"found": False, "error": "폴더 없음"})
-    found = find_hymn_by_number(folder, number)
-    if found:
-        filename, title = found
-        return jsonify({"found": True, "filename": filename, "title": title})
-    return jsonify({"found": False})
 
 
 # ── Template ──────────────────────────────────
@@ -161,16 +137,13 @@ def generate():
             data = json.loads(request.form["payload"])
         else:
             data = request.json
-        config = load_config()
-        template_file = data.get("template_file") or config.get("template_file", "")
-        hymn_folder = data.get("hymn_folder") or config.get("hymn_folder", "")
+        template_file = data.get("template_file") or load_config().get("template_file", "")
 
         if not template_file or not os.path.exists(template_file):
             return jsonify({"error": "템플릿 파일을 찾을 수 없어요"})
 
         data_bytes = generate_presentation(
             template_file,
-            hymn_folder,
             _resolve_hymn_slots(data.get("hymn_slots", []), upload_tmp_files),
             data.get("choir", None),
             data.get("scripture", None),
@@ -184,8 +157,11 @@ def generate():
             download_name=next_sunday_filename(),
         )
 
+    except AppError:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()})
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
     finally:
         for p in upload_tmp_files:
