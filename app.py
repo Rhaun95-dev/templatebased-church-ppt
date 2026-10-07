@@ -3,7 +3,9 @@ import os
 import sys
 
 from flask import Flask, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 
+from church_ppt.auth import init_auth
 from church_ppt.errors import AppError
 from church_ppt.paths import BIBLE_CACHE_DIR
 from church_ppt.routes import bp
@@ -14,6 +16,10 @@ def create_app(config=None):
     app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024
     app.config.update(config or {})
     app.register_blueprint(bp)
+    if (app.config.get("APP_PASSWORD") or os.environ.get("APP_PASSWORD")
+            or os.environ.get("STORAGE") == "supabase"):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+    init_auth(app)
 
     @app.errorhandler(AppError)
     def _app_error(e):

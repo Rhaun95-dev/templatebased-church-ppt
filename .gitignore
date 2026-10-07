@@ -218,3 +218,6 @@ __marimo__/
 # Claude
 context_summary.md
 .claude/
+CLAUDE.md
+docs/
+todo/
