@@ -9,10 +9,10 @@ from flask import Blueprint, jsonify, render_template, request, send_file
 from pptx import Presentation
 
 from .bible import load_bible_meta, lookup_verses
-from .config import load_config, save_config
 from .generator import generate_presentation, next_sunday_filename
-from .errors import AppError
+from .errors import AppError, ConversionError
 from .ppt_convert import convert_ppt_to_pptx
+from .storage import get_storage
 
 bp = Blueprint("main", __name__)
 
@@ -31,25 +31,38 @@ def index():
 
 @bp.route("/api/config", methods=["GET"])
 def get_config():
-    print("HIT /api/config")  # 이거 반드시 찍힘
-    return jsonify(load_config())
+    st = get_storage()
+    return jsonify({**st.get_config(), "mode": st.mode})
 
 
 @bp.route("/api/config", methods=["POST"])
 def set_config():
-    save_config(request.json)
+    get_storage().put_config(request.json or {})
     return jsonify({"ok": True})
 
 
 # ── Template ──────────────────────────────────
 
 
+@bp.route("/api/template", methods=["POST"])
+def upload_template():
+    st = get_storage()
+    if st.mode != "supabase":
+        return jsonify({"error": "로컬 모드에서는 설정 탭에서 템플릿 경로를 지정하세요"}), 400
+    f = request.files.get("file")
+    data = f.read() if f else b""
+    try:
+        total = len(Presentation(io.BytesIO(data)).slides)
+    except Exception:
+        raise ConversionError("올바른 .pptx 파일이 아니에요")
+    st.put_template(data)
+    return jsonify({"ok": True, "total": total})
+
+
 @bp.route("/api/template-info", methods=["POST"])
 def template_info():
-    template_file = request.json.get("template_file", "")
-    if not template_file or not os.path.exists(template_file):
-        return jsonify({"error": "템플릿 파일을 찾을 수 없어요"})
-    try:
+    override = (request.json or {}).get("template_file", "")
+    with get_storage().open_template(override) as template_file:
         prs = Presentation(template_file)
         slides_info = []
         for i, slide in enumerate(prs.slides):
@@ -67,9 +80,7 @@ def template_info():
                     ),
                 }
             )
-        return jsonify({"slides": slides_info, "total": len(slides_info)})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    return jsonify({"slides": slides_info, "total": len(slides_info)})
 
 
 # ── Bible ─────────────────────────────────────
@@ -137,18 +148,14 @@ def generate():
             data = json.loads(request.form["payload"])
         else:
             data = request.json
-        template_file = data.get("template_file") or load_config().get("template_file", "")
-
-        if not template_file or not os.path.exists(template_file):
-            return jsonify({"error": "템플릿 파일을 찾을 수 없어요"})
-
-        data_bytes = generate_presentation(
-            template_file,
-            _resolve_hymn_slots(data.get("hymn_slots", []), upload_tmp_files),
-            data.get("choir", None),
-            data.get("scripture", None),
-            data.get("extra_verses", []),
-        )
+        with get_storage().open_template(data.get("template_file")) as template_file:
+            data_bytes = generate_presentation(
+                template_file,
+                _resolve_hymn_slots(data.get("hymn_slots", []), upload_tmp_files),
+                data.get("choir", None),
+                data.get("scripture", None),
+                data.get("extra_verses", []),
+            )
 
         return send_file(
             io.BytesIO(data_bytes),
