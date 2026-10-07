@@ -8,4 +8,6 @@ assert.deepStrictEqual(parseHymnFilename("서문.pptx"), { number: null, title: 
 assert.strictEqual(parseHymnFilename("~$001_x.pptx"), null);
 assert.strictEqual(parseHymnFilename("001_x.ppt"), null);
 assert.strictEqual(parseHymnFilename("notes.txt"), null);
+assert.deepStrictEqual(parseHymnFilename("001장 만복의 근원 하나님.pptx"), { number: 1, title: "만복의 근원 하나님" });
+assert.deepStrictEqual(parseHymnFilename("006 목소리 높여서.pptx"), { number: 6, title: "목소리 높여서" });
 console.log("hymn-library parse tests passed");

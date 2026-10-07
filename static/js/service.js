@@ -119,22 +119,51 @@ async function uploadCloudTemplate() {
   }
 }
 
+// 찬송가 폴더 상태를 설정 탭과 생성 탭 두 곳에 표시
+function updateHymnStatus(errorText) {
+  let text, color;
+  if (errorText) {
+    text = "❌ " + errorText;
+    color = "var(--red)";
+  } else if (HymnLibrary.ready) {
+    const extra = HymnLibrary.pptxCount - HymnLibrary.count;
+    text = `✓ 📁 ${HymnLibrary.folderName || "선택한 폴더"} — 번호 인식 ${HymnLibrary.count}곡` +
+      (extra > 0 ? ` (번호 없는 파일 ${extra}개 제외)` : "");
+    color = "var(--green)";
+  } else {
+    text = "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
+    color = "var(--text-light)";
+  }
+  showAlertMessage("hymn-lib-status", text, color);
+  showAlertMessage("hymn-banner", text, color);
+  const disp = $("cfg-hymn-folder-display");
+  if (disp) disp.value = HymnLibrary.ready ? HymnLibrary.folderName : "";
+}
+
 // 브라우저 찬송가 폴더 선택 / 복원
 async function chooseHymnFolder() {
   try {
-    const n = await HymnLibrary.pickFolder();
-    showAlertMessage("hymn-lib-status", `✓ 찬송가 ${n}개 발견`, "var(--green)");
+    await HymnLibrary.pickFolder(() => {
+      showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--text-light)");
+      showAlertMessage("hymn-banner", "폴더 읽는 중...", "var(--text-light)");
+    });
+    updateHymnStatus(HymnLibrary.ready ? null : "이 폴더에서 '번호_제목.pptx' 파일을 찾지 못했어요");
   } catch (e) {
-    if (e.name !== "AbortError") showAlertMessage("hymn-lib-status", "❌ " + e.message, "var(--red)");
+    if (e.name !== "AbortError") updateHymnStatus(e.message);
   }
 }
 async function restoreHymnFolder() {
-  const ok = await HymnLibrary.restore();
-  showAlertMessage(
-    "hymn-lib-status",
-    ok ? `✓ 찬송가 ${HymnLibrary.count}개 발견` : "저장된 폴더가 없어요. 폴더를 선택하세요",
-    ok ? "var(--green)" : "var(--text-light)",
-  );
+  try {
+    const ok = await HymnLibrary.restore();
+    if (!ok) {
+      showAlertMessage("hymn-lib-status", "저장된 폴더가 없어요. 폴더를 선택하세요", "var(--text-light)");
+      showAlertMessage("hymn-banner", "저장된 폴더가 없어요. 폴더를 선택하세요", "var(--text-light)");
+      return;
+    }
+    updateHymnStatus();
+  } catch (e) {
+    updateHymnStatus(e.message);
+  }
 }
 
 // 설정에 캐싱된 슬라이드 번호 기본값을 관련 입력칸에 채워 넣기
@@ -591,13 +620,20 @@ async function onHymnNumberInput(idx, value) {
     renderSlots();
     return;
   }
-  hymnSearchTimers[idx] = setTimeout(() => {
+  hymnSearchTimers[idx] = setTimeout(async () => {
+    const slot = state.genSlots[idx];
     if (!HymnLibrary.ready) {
-      state.genSlots[idx].hymn_title = "찬송가 폴더를 먼저 선택하세요";
+      slot.hymn_title = "찬송가 폴더를 먼저 선택하세요";
     } else {
       const hit = HymnLibrary.find(value);
-      state.genSlots[idx].hymn_title = hit ? hit.title : "없음";
-      state.genSlots[idx].upload_file = hit ? hit.file : null;
+      slot.hymn_title = hit ? hit.title : "없음";
+      if (!hit) console.warn("찬송가 없음:", value, "인덱스:", HymnLibrary.count, "곡");
+      try {
+        const file = hit ? await hit.getFile() : null;
+        if (slot.hymn_number === value) slot.upload_file = file;  // 그 사이 번호가 바뀌었으면 버린다
+      } catch (e) {
+        slot.hymn_title = "❌ 파일을 읽지 못했어요";
+      }
     }
     renderSlots();
   }, 400);

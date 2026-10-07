@@ -1,5 +1,5 @@
 /** 브라우저에서 사용자가 고른 로컬 찬송가 폴더를 읽는다 (서버에 라이브러리 없음) */
-const HYMN_FILE_RE = /^(\d+)[\s_-]*(.*?)\.pptx$/i;
+const HYMN_FILE_RE = /^(\d+)(?:장)?[\s_-]*(.*?)\.pptx$/i;
 
 function parseHymnFilename(name) {
   if (name.startsWith("~$")) return null;
@@ -13,6 +13,8 @@ const HymnLibrary = (() => {
   const DB = "church-ppt", STORE = "handles", KEY = "hymn-folder";
   let byNumber = new Map();
   let handle = null;
+  let folderName = "";
+  let pptxCount = 0;
 
   const idb = () =>
     new Promise((resolve, reject) => {
@@ -38,25 +40,34 @@ const HymnLibrary = (() => {
     } catch (e) { return null; }
   }
 
-  function index(files) {
+  // items: [{ name, get: () => Promise<File> }] — 파일 내용은 실제로 고른 곡만 읽는다
+  function index(items) {
     byNumber = new Map();
-    for (const file of files) {
-      const p = parseHymnFilename(file.name);
-      if (p && p.number !== null && !byNumber.has(p.number)) byNumber.set(p.number, { file, title: p.title });
+    pptxCount = 0;
+    for (const item of items) {
+      if (/\.pptx$/i.test(item.name) && !item.name.startsWith("~$")) pptxCount++;
+      const p = parseHymnFilename(item.name);
+      if (p && p.number !== null && !byNumber.has(p.number)) byNumber.set(p.number, { getFile: item.get, title: p.title });
     }
   }
 
   async function readHandle(h) {
     const files = [];
-    for await (const entry of h.values()) {
-      if (entry.kind === "file") files.push(await entry.getFile());
-    }
+    const walk = async (dir, depth) => {
+      for await (const entry of dir.values()) {
+        if (entry.kind === "file") files.push({ name: entry.name, get: () => entry.getFile() });
+        else if (entry.kind === "directory" && depth < 3) await walk(entry, depth + 1);
+      }
+    };
+    await walk(h, 0);
+    folderName = h.name;
     index(files);
   }
 
-  async function pickFolder() {
+  async function pickFolder(onPicked) {
     if (window.showDirectoryPicker) {
       handle = await window.showDirectoryPicker({ mode: "read" });
+      if (onPicked) onPicked();
       await readHandle(handle);
       saveHandle(handle);
       return byNumber.size;
@@ -65,7 +76,13 @@ const HymnLibrary = (() => {
       const input = document.createElement("input");
       input.type = "file";
       input.webkitdirectory = true;
-      input.onchange = () => { index([...input.files]); resolve(byNumber.size); };
+      input.onchange = () => {
+        if (onPicked) onPicked();
+        const fs = [...input.files].map((f) => ({ name: f.name, get: async () => f }));
+        folderName = input.files[0] && input.files[0].webkitRelativePath ? input.files[0].webkitRelativePath.split("/")[0] : "";
+        index(fs);
+        resolve(byNumber.size);
+      };
       input.click();
     });
   }
@@ -86,6 +103,8 @@ const HymnLibrary = (() => {
     find: (n) => byNumber.get(Number(n)) || null,
     get count() { return byNumber.size; },
     get ready() { return byNumber.size > 0; },
+    get folderName() { return folderName; },
+    get pptxCount() { return pptxCount; },
   };
 })();
 

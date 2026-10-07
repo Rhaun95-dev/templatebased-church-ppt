@@ -87,6 +87,15 @@
             각 슬롯마다 찬송가 번호를 입력하세요. 스킵하면 해당 위치는
             건너뜁니다.
           </p>
+          <div class="path-input-row" id="hymn-banner-row">
+            <div class="path-status" id="hymn-banner" style="flex: 1"></div>
+            <button class="btn btn-outline btn-sm" onclick="chooseHymnFolder()">
+              📁 폴더 선택
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="restoreHymnFolder()">
+              이전 폴더
+            </button>
+          </div>
           <div class="slot-list" id="slot-list"></div>
           <div class="add-slot-row">
             <div style="flex: 1">
@@ -580,6 +589,12 @@
           <div id="hymn-library-box">
             <label>찬송가 폴더 (내 컴퓨터)</label>
             <div class="path-input-row">
+              <input
+                type="text"
+                id="cfg-hymn-folder-display"
+                readonly
+                placeholder="선택된 폴더 없음"
+              />
               <button class="btn btn-outline btn-sm" onclick="chooseHymnFolder()">
                 📁 찬송가 폴더 선택
               </button>

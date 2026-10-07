@@ -73,6 +73,7 @@ function toggleScripturePreview() {
 
 // 초기 로딩 진입점 호출
 document.addEventListener("DOMContentLoaded", () => {
+  updateHymnStatus();
   init().then(renderCfgSlots);
 });
 
