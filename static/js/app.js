@@ -75,3 +75,25 @@ function toggleScripturePreview() {
 document.addEventListener("DOMContentLoaded", () => {
   init().then(renderCfgSlots);
 });
+
+// 로그인 오버레이
+function showLogin() {
+  $("login-overlay").style.display = "flex";
+  $("login-password").focus();
+}
+
+async function submitLogin() {
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: $("login-password").value }),
+  });
+  if (res.ok) {
+    $("login-overlay").style.display = "none";
+    $("login-password").value = "";
+    $("login-error").textContent = "";
+    init().then(renderCfgSlots);
+    return;
+  }
+  $("login-error").textContent = (await res.json()).error || "로그인 실패";
+}
