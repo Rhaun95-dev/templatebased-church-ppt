@@ -57,6 +57,7 @@ async function init() {
     const res = await apiFetch("/api/config");
     state.config = await res.json();
     if (state.config.hymn_slots?.length > 0) {
+      sortCfgSlots();
       state.genSlots = state.config.hymn_slots.map(createGenSlot);
       renderCfgSlots();
     }
@@ -792,7 +793,15 @@ let cfgSlotEditMode = false;
 
 const escapeAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 
+// 기본 슬롯을 "슬라이드 N 이후" 번호 순으로 정렬 (같은 번호는 기존 순서 유지)
+function sortCfgSlots() {
+  const slots = state.config.hymn_slots;
+  if (slots) slots.sort((a, b) => a.after_slide_index - b.after_slide_index);
+}
+
 function renderCfgSlots() {
+  // 번호를 입력하는 중에는 줄이 움직이지 않게 두고, 수정 완료/추가/저장 때 정렬한다
+  if (!cfgSlotEditMode) sortCfgSlots();
   const list = $("cfg-slot-list");
   list.innerHTML = "";
   let cfgSlots = state.config.hymn_slots || [];
@@ -864,6 +873,7 @@ function addCfgSlot() {
     name,
     after_slide_index: parseInt(after) - 1,
   });
+  sortCfgSlots();
   $("cfg-new-slot-name").value = "";
   $("cfg-new-slot-after").value = "";
   renderCfgSlots();
@@ -893,6 +903,7 @@ async function saveConfig() {
     extra_verse_slide_idx: readIdx("ev-slide-idx"),
   };
 
+  sortCfgSlots();
   try {
     await apiFetch("/api/config", {
       method: "POST",
@@ -905,8 +916,10 @@ async function saveConfig() {
   }
 
   if (state.config.hymn_slots) {
+    sortCfgSlots();
     state.genSlots = state.config.hymn_slots.map(createGenSlot);
     renderSlots();
+    renderCfgSlots();
   }
   showAlert("cfg-alert", "✓ 설정이 저장되었어요!", "success");
 }
