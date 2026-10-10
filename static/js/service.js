@@ -346,7 +346,52 @@ function updateScriptureRefBadge() {
 function setupScriptureRefBadge() {
   ["sc-book", "sc-chapter", "sc-verse-start", "sc-verse-end"].forEach((id) => {
     $(id).addEventListener("input", updateScriptureRefBadge);
+    $(id).addEventListener("input", scheduleScriptureValidation);
   });
+}
+
+// 입력한 구절이 실제로 있는지 확인해 빨간 글씨로 알린다 (입력 멈춘 뒤 조회)
+let scriptureValidateTimer = null;
+let scriptureValidateSeq = 0;
+
+function scheduleScriptureValidation() {
+  clearTimeout(scriptureValidateTimer);
+  scriptureValidateSeq++;
+  showAlertMessage("sc-verse-status", "", "var(--red)");
+  scriptureValidateTimer = setTimeout(validateScriptureInput, 400);
+}
+
+async function validateScriptureInput() {
+  const input = readScriptureInput();
+  if (!input) return;
+  const seq = scriptureValidateSeq;
+  let message = "";
+  try {
+    const data = await fetchBibleVerses(input.book, input.chapter, input.verseStart, input.verseEnd);
+    message = verseRangeProblem(data, input.verseStart, input.verseEnd);
+  } catch (e) {
+    return; // 조회 실패(네트워크 등)는 생성 시점에 다시 확인됨
+  }
+  if (seq !== scriptureValidateSeq) return; // 그 사이 입력이 바뀜
+  showAlertMessage("sc-verse-status", message, "var(--red)");
+}
+
+// 조회 결과가 요청한 범위와 다르면 안내 문구, 정상이면 빈 문자열
+function verseRangeProblem(data, verseStart, verseEnd) {
+  const start = parseInt(verseStart);
+  const end = parseInt(verseEnd);
+  if (end < start) return "❌ 끝 절은 시작 절보다 같거나 커야 해요";
+  if (data.error) return "❌ " + data.error;
+  if (data.verses.length < end - start + 1) {
+    if (end <= data.max_verse) {
+      const have = new Set(data.verses.map((v) => v.num));
+      const missing = [];
+      for (let n = start; n <= end; n++) if (!have.has(n)) missing.push(n);
+      return `❌ ${data.book_name} ${data.chapter}장에 ${missing.join(", ")}절이 없어요 (있는 구절만 생성돼요)`;
+    }
+    return `❌ ${data.book_name} ${data.chapter}장은 ${data.max_verse}절까지 있어요 (있는 구절만 생성돼요)`;
+  }
+  return "";
 }
 
 // 구절 본문 로드 — 같은 입력이면 이전 결과를 재사용, 입력이 바뀌었으면 다시 조회
@@ -399,7 +444,12 @@ async function addExtraVerse() {
       verses: data.verses,
       chapter: data.chapter,
     });
-    showAlertMessage("ev-add-status", `✓ ${data.ref} 추가됨`, "var(--green)");
+    const problem = verseRangeProblem(data, vsS, vsE);
+    if (problem) {
+      showAlertMessage("ev-add-status", problem.replace("❌", "⚠ " + data.ref + " 추가됨 ·"), "var(--red)");
+    } else {
+      showAlertMessage("ev-add-status", `✓ ${data.ref} 추가됨`, "var(--green)");
+    }
 
     ["ev-book", "ev-chapter", "ev-verse-start", "ev-verse-end"].forEach(
       (id) => {
