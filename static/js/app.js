@@ -4,32 +4,22 @@
  * ══════════════════════════════════════════════════
  */
 
-// 탭 전환 핸들러 (찬송가 / 성가대 / 성경 구절, 그리고 헤더 톱니바퀴의 설정)
-let lastMainTab = "hymn";
-
+// 화면 전환: 기본 페이지(찬송가·성가대·성경 구절을 모두 표시) / 설정
 function showPanel(name) {
-  document
-    .querySelectorAll(".tab-panel")
-    .forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
-  document
-    .querySelectorAll(".tab-btn")
-    .forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   const settings = name === "settings";
-  // 설정 화면에서는 탭 바와 PPT 생성 영역을 숨긴다
-  $("tabs").classList.toggle("hidden", settings);
+  document.querySelectorAll(".tab-panel").forEach((p) => {
+    const isSettings = p.id === "tab-settings";
+    p.classList.toggle("active", settings === isSettings);
+  });
+  // 설정 화면에서는 PPT 생성 영역을 숨긴다
   $("generate-bar").classList.toggle("hidden", settings);
   $("settings-btn").setAttribute("aria-pressed", String(settings));
 }
 
-function switchTab(name) {
-  lastMainTab = name;
-  showPanel(name);
-}
-
-// 헤더 톱니바퀴: 설정을 열고, 다시 누르면 보던 탭으로 돌아간다
+// 헤더 톱니바퀴: 설정을 열고, 다시 누르면 기본 페이지로 돌아간다
 function toggleSettings() {
   const open = $("tab-settings").classList.contains("active");
-  showPanel(open ? lastMainTab : "settings");
+  showPanel(open ? "main" : "settings");
 }
 
 // 화면 테마 (navy-dark / navy-light)
@@ -38,15 +28,12 @@ function setTheme(name) {
   try {
     localStorage.setItem("theme", name);
   } catch (e) {}
-  markThemeButtons();
+  syncThemeToggle();
 }
 
-function markThemeButtons() {
-  const cur = document.documentElement.dataset.theme;
-  document.querySelectorAll("[data-theme-btn]").forEach((b) => {
-    b.classList.toggle("btn-gold", b.dataset.themeBtn === cur);
-    b.classList.toggle("btn-outline", b.dataset.themeBtn !== cur);
-  });
+function syncThemeToggle() {
+  const el = $("theme-toggle");
+  if (el) el.checked = document.documentElement.dataset.theme === "navy-light";
 }
 
 // 섹션 활성화 체크박스에 따라 대상 섹션의 disabled 표시 토글
@@ -94,8 +81,7 @@ function toggleChoirPreview() {
 
 // 초기 로딩 진입점 호출
 document.addEventListener("DOMContentLoaded", () => {
-  markThemeButtons();
-  markThemeButtons();
+  syncThemeToggle();
   updateHymnStatus();
   HymnLibrary.restoreIfGranted().then((ok) => ok && updateHymnStatus());
   TemplateLibrary.restore().then(() => updateTemplateStatus());

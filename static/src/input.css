@@ -41,7 +41,7 @@
     @apply min-h-screen bg-surface font-sans text-ink antialiased;
   }
   label {
-    @apply mb-1.5 block text-[13px] font-medium text-muted;
+    @apply mb-1.5 block text-[13px] font-medium text-ink;
   }
   input[type="text"],
   input[type="number"],
@@ -70,13 +70,7 @@
 @tailwind components;
 
 @layer components {
-  /* 탭 */
-  .tab-btn {
-    @apply flex-1 cursor-pointer rounded-md border-0 bg-transparent px-2 py-2.5 text-sm text-muted transition-colors hover:bg-brand-soft hover:text-ink sm:px-4;
-  }
-  .tab-btn.active {
-    @apply bg-brand font-semibold text-on-brand hover:bg-brand hover:text-on-brand;
-  }
+  /* 화면 패널 */
   .tab-panel {
     @apply hidden;
   }
@@ -90,6 +84,26 @@
     @apply border-brand bg-brand text-on-brand;
   }
 
+  /* 테마 슬라이드 토글 (🌙 / ☀️) */
+  .theme-switch {
+    @apply relative mb-0 inline-block h-8 w-[62px] flex-none cursor-pointer;
+  }
+  .theme-switch input {
+    @apply absolute h-0 w-0 opacity-0;
+  }
+  .theme-track {
+    @apply absolute inset-0 flex items-center justify-between rounded-full border border-line bg-surface px-2 text-sm leading-none transition-colors;
+  }
+  .theme-thumb {
+    @apply absolute left-0.5 top-0.5 h-6 w-7 rounded-full bg-brand transition-transform;
+  }
+  .theme-switch input:checked ~ .theme-track .theme-thumb {
+    @apply translate-x-7;
+  }
+  .theme-switch input:focus-visible ~ .theme-track {
+    @apply shadow-focus;
+  }
+
   /* 카드 */
   .card {
     @apply mb-5 rounded-lg border border-line bg-raised p-4 sm:p-6;
@@ -98,7 +112,7 @@
     @apply mb-4 text-base font-semibold text-ink;
   }
   .section-hint {
-    @apply mt-2 text-xs leading-relaxed text-muted;
+    @apply mt-2 text-xs leading-relaxed text-ink;
   }
   .sep {
     @apply my-5 h-px bg-line;
@@ -138,10 +152,10 @@
     @apply flex min-w-0 items-center gap-2 sm:min-w-[210px];
   }
   .slot-label {
-    @apply whitespace-nowrap text-sm font-semibold text-brand-text;
+    @apply whitespace-nowrap text-sm font-semibold text-ink;
   }
   .slot-item .after-slide {
-    @apply whitespace-nowrap text-xs text-muted;
+    @apply whitespace-nowrap text-xs text-ink;
   }
   .slot-hymn-search {
     @apply flex min-w-0 items-center gap-2 max-sm:order-3 max-sm:col-span-2 sm:flex-1;
@@ -150,7 +164,7 @@
     @apply w-16 flex-none px-2 py-1.5 text-center;
   }
   .hymn-title-display {
-    @apply flex min-h-8 min-w-0 flex-1 items-center truncate rounded-sm bg-brand-soft px-2 text-[13px] text-brand-text;
+    @apply flex min-h-8 min-w-0 flex-1 items-center truncate rounded-sm bg-brand-soft px-2 text-[13px] text-ink;
   }
   .hymn-title-display.found {
     @apply text-success;
@@ -207,7 +221,7 @@
     @apply rounded-md border border-line bg-surface p-3;
   }
   .preview-slide-card .slide-no {
-    @apply mb-1.5 text-[11px] font-semibold text-brand-text;
+    @apply mb-1.5 text-[11px] font-semibold text-ink;
   }
   .preview-slide-card .slide-content {
     @apply whitespace-pre-line text-[13px] leading-[1.7] text-ink;
@@ -219,10 +233,10 @@
     @apply flex-1;
   }
   .ev-item-ref {
-    @apply mb-1 text-xs font-semibold text-brand-text;
+    @apply mb-1 text-xs font-semibold text-ink;
   }
   .ev-item-slide {
-    @apply text-[11px] text-muted;
+    @apply text-[11px] text-ink;
   }
 
   /* 설정 */

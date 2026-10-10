@@ -92,7 +92,7 @@ function updateTemplateStatus(errorText) {
   } else if (TemplateLibrary.ready) {
     showAlertMessage("cfg-template-status", "✓ " + TemplateLibrary.name, "var(--success)");
   } else {
-    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--muted)");
+    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--ink)");
   }
 }
 
@@ -122,7 +122,7 @@ function updateHymnStatus(errorText) {
     color = "var(--success)";
   } else {
     text = "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
-    color = "var(--muted)";
+    color = "var(--ink)";
   }
   showAlertMessage("hymn-lib-status", text, color);
   const disp = $("cfg-hymn-folder-display");
@@ -133,7 +133,7 @@ function updateHymnStatus(errorText) {
 async function chooseHymnFolder() {
   try {
     await HymnLibrary.pickFolder(() => {
-      showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--muted)");
+      showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--ink)");
     });
     updateHymnStatus(HymnLibrary.ready ? null : "이 폴더에서 '번호_제목.pptx' 파일을 찾지 못했어요");
   } catch (e) {
@@ -229,7 +229,7 @@ function renderBookDropdown(dropdownId) {
     item.className =
       "flex cursor-pointer gap-2 border-b border-line px-3 py-2 text-[13px]" +
       (active ? " bg-brand-soft" : "");
-    item.innerHTML = `<span class="min-w-9 font-semibold text-brand-text">${b.abbr}</span>
+    item.innerHTML = `<span class="min-w-9 font-semibold text-ink">${b.abbr}</span>
       <span class="text-ink">${b.name}</span>`;
     item.onmousedown = (e) => {
       e.preventDefault();
@@ -429,7 +429,7 @@ async function addExtraVerse() {
     return;
   }
   status.textContent = "불러오는 중...";
-  status.style.color = "var(--muted)";
+  status.style.color = "var(--ink)";
   try {
     const data = await fetchBibleVerses(book, ch, vsS, vsE);
     if (data.error) {
@@ -499,7 +499,7 @@ function renderSlots() {
 
   if (state.genSlots.length === 0) {
     list.innerHTML =
-      '<p class="p-4 text-center text-[13px] text-muted">+ 아래에서 슬롯을 추가하세요</p>';
+      '<p class="p-4 text-center text-[13px] text-ink">+ 아래에서 슬롯을 추가하세요</p>';
     return;
   }
 
@@ -823,16 +823,16 @@ function renderCfgSlots() {
       div.innerHTML = `
         <input type="text" value="${escapeAttr(slot.name)}" placeholder="슬롯 이름"
           class="min-w-0 flex-1" oninput="updateCfgSlot(${idx}, 'name', this.value)">
-        <span class="whitespace-nowrap text-xs text-muted">슬라이드</span>
+        <span class="whitespace-nowrap text-xs text-ink">슬라이드</span>
         <input type="number" min="1" value="${slot.after_slide_index + 1}"
           class="!w-20" oninput="updateCfgSlot(${idx}, 'after', this.value)">
-        <span class="whitespace-nowrap text-xs text-muted">이후</span>
+        <span class="whitespace-nowrap text-xs text-ink">이후</span>
         ${skip}${del}
       `;
     } else {
       div.innerHTML = `
-        <span class="min-w-[90px] flex-1 text-[13px] font-semibold text-brand-text">${slot.name}</span>
-        <span class="text-xs text-muted">슬라이드 ${
+        <span class="min-w-[90px] flex-1 text-[13px] font-semibold text-ink">${slot.name}</span>
+        <span class="text-xs text-ink">슬라이드 ${
           slot.after_slide_index + 1
         } 이후</span>
         ${skip}${del}
