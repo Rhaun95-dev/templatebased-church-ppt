@@ -23,7 +23,8 @@
     },
     {
       "name": "성가대(방학)",
-      "after_slide_index": 11
+      "after_slide_index": 11,
+      "default_skip": true
     }
   ],
   "template_file": "R:\\교회\\예배 PPT\\2026\\TEMPLATE2.pptx",

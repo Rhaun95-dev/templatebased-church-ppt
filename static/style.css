@@ -317,41 +317,6 @@ textarea {
   height: 16px;
 }
 
-/* Slide picker */
-.slide-picker {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #4a4020;
-  border-radius: 8px;
-  margin-top: 8px;
-}
-.slide-option {
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  border-bottom: 1px solid #2a2010;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.slide-option:hover {
-  background: var(--dark3);
-}
-.slide-option.selected {
-  background: rgba(201, 168, 76, 0.15);
-  color: var(--gold-light);
-}
-.slide-num {
-  color: var(--gold);
-  font-weight: 600;
-  min-width: 28px;
-  font-size: 12px;
-}
-.slide-text {
-  color: var(--text-light);
-  font-size: 12px;
-}
-
 .sep {
   height: 1px;
   background: var(--dark3);
@@ -480,24 +445,6 @@ textarea {
 .scripture-section.disabled {
   opacity: 0.35;
   pointer-events: none;
-}
-.scripture-slide-card {
-  background: var(--dark3);
-  border: 1px solid #4a4020;
-  border-radius: 8px;
-  padding: 12px;
-}
-.scripture-slide-card .slide-label {
-  font-size: 11px;
-  color: var(--gold);
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.scripture-slide-card .slide-body {
-  font-size: 13px;
-  color: var(--cream);
-  line-height: 1.7;
-  white-space: pre-line;
 }
 .ev-item {
   background: var(--dark3);

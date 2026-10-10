@@ -34,6 +34,23 @@ class GenerateLocalTests(unittest.TestCase):
         prs = Presentation(io.BytesIO(res.data))
         self.assertEqual(len(prs.slides), 5)
 
+    def test_generate_uses_template_uploaded_with_request(self):
+        # 서버에 저장된 템플릿이 없어도, 요청에 실린 템플릿으로 생성된다
+        app = create_app({"TESTING": True, "STORAGE": "local",
+                          "CONFIG_FILE": os.path.join(self.tmp, "none.json")})
+        payload = {"hymn_slots": []}
+        with open(self.template, "rb") as f:
+            res = app.test_client().post("/api/generate", data={
+                "payload": json.dumps(payload), "template": (f, "t.pptx")})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(Presentation(io.BytesIO(res.data)).slides), 3)
+
+    def test_uploaded_template_must_be_pptx(self):
+        res = self.client.post("/api/generate", data={
+            "payload": json.dumps({"hymn_slots": []}),
+            "template": (io.BytesIO(b"not a zip"), "t.pptx")})
+        self.assertEqual(res.status_code, 422)
+
     def test_removed_server_hymn_routes(self):
         self.assertEqual(self.client.post("/api/scan-hymns", json={"folder": "x"}).status_code, 404)
         self.assertEqual(self.client.post("/api/search-hymn", json={"folder": "x", "number": 1}).status_code, 404)

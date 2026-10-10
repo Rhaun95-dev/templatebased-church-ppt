@@ -4,6 +4,8 @@ import json
 import os
 import tempfile
 import traceback
+import zipfile
+from contextlib import nullcontext
 
 from flask import Blueprint, jsonify, render_template, request, send_file
 from pptx import Presentation
@@ -132,6 +134,20 @@ def _save_uploaded_hymn(upload, tmp_files):
     return path
 
 
+def _save_uploaded_template(tmp_files):
+    """요청에 포함된 템플릿(사용자가 브라우저에서 고른 파일)을 임시 pptx로 저장. 없으면 None"""
+    upload = request.files.get("template")
+    if not upload:
+        return None
+    fd, path = tempfile.mkstemp(suffix=".pptx")
+    os.close(fd)
+    tmp_files.append(path)
+    upload.save(path)
+    if not zipfile.is_zipfile(path):
+        raise ConversionError("올바른 .pptx 파일이 아니에요")
+    return path
+
+
 def _resolve_hymn_slots(hymn_slots, tmp_files):
     """upload_key가 있는 슬롯에 업로드 파일의 임시 경로(upload_file)를 채운다"""
     slots = []
@@ -154,7 +170,14 @@ def generate():
             data = json.loads(request.form["payload"])
         else:
             data = request.json
-        with get_storage().open_template(data.get("template_file")) as template_file:
+        # 사용자가 고른 템플릿이 있으면 그것을, 없으면 저장소의 기본 템플릿을 쓴다
+        uploaded = _save_uploaded_template(upload_tmp_files)
+        template_ctx = (
+            nullcontext(uploaded)
+            if uploaded
+            else get_storage().open_template(data.get("template_file"))
+        )
+        with template_ctx as template_file:
             data_bytes = generate_presentation(
                 template_file,
                 _resolve_hymn_slots(data.get("hymn_slots", []), upload_tmp_files),

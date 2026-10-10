@@ -13,7 +13,7 @@ function createGenSlot(s, i) {
     hymn_number: "",
     hymn_title: "",
     upload_file: null,
-    skip: false,
+    skip: !!s.default_skip, // 설정에서 '기본 스킵'으로 지정된 슬롯은 스킵 상태로 시작
   };
 }
 
@@ -30,9 +30,8 @@ let state = {
     },
   },
   genSlots: [],
-  templateSlides: [],
-  choirSelectMode: null,
   bibleMeta: { books: [], abbr_to_id: {} },
+  scriptureKey: "", // 마지막으로 조회한 책|장|시작절|끝절 (같은 입력이면 재조회 생략)
   scriptureVerses: [],
   scriptureRef: "",
   scriptureBookName: "",
@@ -57,13 +56,6 @@ async function init() {
 
     const res = await apiFetch("/api/config");
     state.config = await res.json();
-    applyMode(state.config.mode);
-
-    if (state.config.template_file) {
-      $("cfg-template").value = state.config.template_file;
-      $("gen-template").value = state.config.template_file;
-    }
-
     if (state.config.hymn_slots?.length > 0) {
       state.genSlots = state.config.hymn_slots.map(createGenSlot);
       renderCfgSlots();
@@ -79,6 +71,9 @@ async function init() {
     // 성경책 자동완성 드롭다운 키보드 탐색(↑/↓/Enter) 연결
     setupBookInputKeyboardNav();
 
+    // 성경 구절 입력값에 맞춰 표시 배지 갱신
+    setupScriptureRefBadge();
+
     // 성경 데이터 메타 정보 로드
     const bm = await apiFetch("/api/bible-meta");
     state.bibleMeta = await bm.json();
@@ -87,35 +82,29 @@ async function init() {
   }
 }
 
-// 실행 모드(local / supabase)에 따라 템플릿 UI 전환
-function applyMode(mode) {
-  const cloud = mode === "supabase";
-  $("cfg-template-row").style.display = cloud ? "none" : "";
-  $("gen-template-row").style.display = cloud ? "none" : "";
-  $("cloud-template-box").style.display = cloud ? "block" : "none";
-  if (cloud) loadTemplateSlides();
+// 설정 탭: 선택한 템플릿 파일 이름 표시 (파일은 서버에 저장하지 않음)
+function updateTemplateStatus(errorText) {
+  const disp = $("cfg-template-display");
+  if (disp) disp.value = TemplateLibrary.ready ? TemplateLibrary.name : "";
+  if (errorText) {
+    showAlertMessage("cfg-template-status", "❌ " + errorText, "var(--red)");
+  } else if (TemplateLibrary.ready) {
+    showAlertMessage("cfg-template-status", "✓ " + TemplateLibrary.name, "var(--green)");
+  } else {
+    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--text-light)");
+  }
 }
 
-// 클라우드 모드: 템플릿 업로드
-async function uploadCloudTemplate() {
-  const f = $("cloud-template-file").files[0];
-  if (!f || !/\.pptx$/i.test(f.name)) {
-    showAlertMessage("cloud-template-status", "❌ .pptx 파일을 선택하세요", "var(--red)");
-    return;
-  }
+async function chooseTemplateFile() {
   try {
-    const fd = new FormData();
-    fd.append("file", f);
-    const res = await apiFetch("/api/template", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) {
-      showAlertMessage("cloud-template-status", "❌ " + data.error, "var(--red)");
+    const name = await TemplateLibrary.pick();
+    if (!/\.pptx$/i.test(name)) {
+      updateTemplateStatus(".pptx 파일을 선택하세요");
       return;
     }
-    showAlertMessage("cloud-template-status", `✓ 업로드됨 (슬라이드 ${data.total}장)`, "var(--green)");
-    loadTemplateSlides();
+    updateTemplateStatus();
   } catch (e) {
-    showAlertMessage("cloud-template-status", "❌ " + e.message, "var(--red)");
+    if (e.name !== "AbortError") updateTemplateStatus(e.message);
   }
 }
 
@@ -135,37 +124,21 @@ function updateHymnStatus(errorText) {
     color = "var(--text-light)";
   }
   showAlertMessage("hymn-lib-status", text, color);
-  showAlertMessage("hymn-banner", text, color);
   const disp = $("cfg-hymn-folder-display");
   if (disp) disp.value = HymnLibrary.ready ? HymnLibrary.folderName : "";
 }
 
-// 브라우저 찬송가 폴더 선택 / 복원
+// 브라우저 찬송가 폴더 선택
 async function chooseHymnFolder() {
   try {
     await HymnLibrary.pickFolder(() => {
       showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--text-light)");
-      showAlertMessage("hymn-banner", "폴더 읽는 중...", "var(--text-light)");
     });
     updateHymnStatus(HymnLibrary.ready ? null : "이 폴더에서 '번호_제목.pptx' 파일을 찾지 못했어요");
   } catch (e) {
     if (e.name !== "AbortError") updateHymnStatus(e.message);
   }
 }
-async function restoreHymnFolder() {
-  try {
-    const ok = await HymnLibrary.restore();
-    if (!ok) {
-      showAlertMessage("hymn-lib-status", "저장된 폴더가 없어요. 폴더를 선택하세요", "var(--text-light)");
-      showAlertMessage("hymn-banner", "저장된 폴더가 없어요. 폴더를 선택하세요", "var(--text-light)");
-      return;
-    }
-    updateHymnStatus();
-  } catch (e) {
-    updateHymnStatus(e.message);
-  }
-}
-
 // 설정에 캐싱된 슬라이드 번호 기본값을 관련 입력칸에 채워 넣기
 function applySlideDefaults() {
   const sd = state.config.slide_defaults || {};
@@ -189,6 +162,17 @@ function applyInputUxDefaults() {
     lyrics.style.minHeight = "220px";
     if (!lyrics.rows || lyrics.rows < 10) lyrics.rows = 10;
   }
+  // 성경 구절 입력칸은 항상 빈 상태로 시작 (브라우저 폼 복원/자동완성 방지)
+  ["sc-book", "sc-chapter", "sc-verse-start", "sc-verse-end"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.setAttribute("autocomplete", "off");
+    el.value = "";
+  });
+  const scBookStatus = $("sc-book-status");
+  if (scBookStatus) scBookStatus.textContent = "";
+  updateScriptureRefBadge();
+
   ["sc-book", "ev-book"].forEach((id) => {
     const el = $(id);
     if (!el) return;
@@ -268,6 +252,7 @@ function selectBook(dropdownId, idx) {
     status.style.color = "var(--green)";
   }
   closeBookDropdown(dropdownId);
+  if (inputId === "sc-book") updateScriptureRefBadge();
 }
 
 // 성경책 입력칸에서 ↑/↓로 항목 이동, Enter로 선택, Esc로 닫기
@@ -327,66 +312,56 @@ function fetchBibleVerses(bookAbbr, chapter, verseStart, verseEnd) {
   });
 }
 
-// 기본 성경 구절 API 호출
-async function fetchScripture() {
+// 기본 성경 구절 입력값 읽기 (불완전하면 null)
+function readScriptureInput() {
   const book = $("sc-book").value.trim();
-  const ch = $("sc-chapter").value;
-  const vsS = $("sc-verse-start").value;
-  const vsEraw = $("sc-verse-end").value;
-  const vsE = vsEraw || vsS; // 끝절 미입력 시 시작절과 동일(한 절)로 처리
-  const status = $("sc-fetch-status");
-
-  if (!book || !ch || !vsS) {
-    showAlertMessage(
-      "sc-fetch-status",
-      "❌ 책·장·시작절을 입력하세요",
-      "var(--red)",
-    );
-    return;
-  }
-  status.textContent = "불러오는 중...";
-  status.style.color = "var(--text-light)";
-  try {
-    const data = await fetchBibleVerses(book, ch, vsS, vsE);
-    if (data.error) {
-      showAlertMessage("sc-fetch-status", "❌ " + data.error, "var(--red)");
-      return;
-    }
-    state.scriptureVerses = data.verses;
-    state.scriptureRef = data.ref;
-    state.scriptureBookName = data.book_name;
-    state.scriptureChapter = data.chapter;
-    state.scriptureVerseStart = data.verse_start;
-    state.scriptureVerseEnd = data.verse_end;
-    showAlertMessage(
-      "sc-fetch-status",
-      `✓ ${data.verses.length}절 로드됨`,
-      "var(--green)",
-    );
-    renderScripturePreview();
-  } catch (e) {
-    showAlertMessage("sc-fetch-status", "❌ " + e.message, "var(--red)");
-  }
+  const chapter = $("sc-chapter").value;
+  const verseStart = $("sc-verse-start").value;
+  const verseEnd = $("sc-verse-end").value || verseStart; // 끝절 미입력 시 시작절과 동일(한 절)로 처리
+  if (!book || !chapter || !verseStart) return null;
+  return { book, chapter, verseStart, verseEnd };
 }
 
-function renderScripturePreview() {
-  const verses = state.scriptureVerses;
-  if (!verses.length) return;
-  $("sc-preview").style.display = "block";
-  $("sc-ref-badge").textContent = state.scriptureRef;
-  const slideEl = $("sc-slide-preview");
-  slideEl.innerHTML = "";
-  for (let i = 0; i < verses.length; i += 2) {
-    const chunk = verses.slice(i, i + 2);
-    const card = document.createElement("div");
-    card.className = "scripture-slide-card";
-    const lines = chunk.map((v) => `${v.num} ${v.text}`).join("\n");
-    card.innerHTML = `<div class="slide-label">슬라이드 ${
-      Math.floor(i / 2) + 1
-    }</div>
-      <div class="slide-body">${lines.replace(/\n/g, "<br>")}</div>`;
-    slideEl.appendChild(card);
+// 입력값을 "사사기 5:11-16" 형태로 표시 (구절 조회 없이 입력 상태만 반영)
+function updateScriptureRefBadge() {
+  const input = readScriptureInput();
+  const box = $("sc-preview");
+  if (!input) {
+    box.style.display = "none";
+    return;
   }
+  const bookMeta = (state.bibleMeta.books || []).find(
+    (b) => b.abbr === input.book || b.name === input.book,
+  );
+  const bookName = bookMeta ? bookMeta.name : input.book;
+  const range =
+    input.verseEnd === input.verseStart
+      ? input.verseStart
+      : `${input.verseStart}-${input.verseEnd}`;
+  $("sc-ref-badge").textContent = `${bookName} ${input.chapter}:${range}`;
+  box.style.display = "block";
+}
+
+// 책·장·절 입력 변경 시 배지 갱신
+function setupScriptureRefBadge() {
+  ["sc-book", "sc-chapter", "sc-verse-start", "sc-verse-end"].forEach((id) => {
+    $(id).addEventListener("input", updateScriptureRefBadge);
+  });
+}
+
+// 구절 본문 로드 — 같은 입력이면 이전 결과를 재사용, 입력이 바뀌었으면 다시 조회
+async function loadScriptureForInput(input) {
+  const key = [input.book, input.chapter, input.verseStart, input.verseEnd].join("|");
+  if (state.scriptureKey === key) return;
+  const data = await fetchBibleVerses(input.book, input.chapter, input.verseStart, input.verseEnd);
+  if (data.error) throw new Error(data.error);
+  state.scriptureKey = key;
+  state.scriptureVerses = data.verses;
+  state.scriptureRef = data.ref;
+  state.scriptureBookName = data.book_name;
+  state.scriptureChapter = data.chapter;
+  state.scriptureVerseStart = data.verse_start;
+  state.scriptureVerseEnd = data.verse_end;
 }
 
 // 추가 성경 구절 로직
@@ -464,84 +439,6 @@ function renderExtraVerseList() {
 function removeExtraVerse(idx) {
   state.extraVerses.splice(idx, 1);
   renderExtraVerseList();
-}
-
-// PPT 템플릿 정보 호출
-async function loadTemplateSlides() {
-  const cloud = state.config.mode === "supabase";
-  const path = cloud ? "" : $("gen-template").value.trim();
-  if (!path && !cloud) return;
-
-  const status = $("gen-template-status");
-  status.textContent = "불러오는 중...";
-  status.style.color = "var(--text-light)";
-
-  let data;
-  try {
-    data = await postJSON("/api/template-info", cloud ? {} : { template_file: path });
-  } catch (e) {
-    showAlertMessage("gen-template-status", "❌ " + e.message, "var(--red)");
-    return;
-  }
-
-  if (data.error) {
-    // 클라우드에서 아직 템플릿을 올리기 전이면 조용히 안내만
-    showAlertMessage("gen-template-status", cloud ? "템플릿을 업로드하세요" : "❌ " + data.error, cloud ? "var(--text-light)" : "var(--red)");
-    return;
-  }
-
-  state.templateSlides = data.slides;
-  showAlertMessage(
-    "gen-template-status",
-    `✓ 슬라이드 ${data.total}장 로드됨`,
-    "var(--green)",
-  );
-
-  const listEl = $("gen-slides-list");
-  listEl.innerHTML = "";
-  data.slides.forEach((slide) => {
-    const div = document.createElement("div");
-    div.className = "slide-option";
-    div.dataset.idx = slide.index;
-    div.innerHTML = `<span class="slide-num">${slide.number}</span><span class="slide-text">${slide.preview_text}</span>`;
-    div.onclick = () =>
-      onSlideClick(slide.index, slide.number, slide.preview_text);
-    listEl.appendChild(div);
-  });
-
-  $("gen-slide-picker").style.display = "block";
-  $("gen-select-hint").textContent = "성가대 제목 슬라이드를 클릭하세요";
-  state.choirSelectMode = "title";
-}
-
-function onSlideClick(idx, number, text) {
-  const hint = $("gen-select-hint");
-
-  if (state.choirSelectMode === "title") {
-    $("choir-title-idx").value = number;
-    const titleStatus = $("choir-title-status");
-    titleStatus.textContent = "✓ " + text.substring(0, 30);
-    titleStatus.style.color = "var(--green)";
-    state.choirSelectMode = "lyrics";
-    hint.textContent = "이제 가사 템플릿 슬라이드를 클릭하세요";
-    document
-      .querySelectorAll("#gen-slides-list .slide-option")
-      .forEach((el) => {
-        el.classList.toggle("selected", parseInt(el.dataset.idx) === idx);
-      });
-  } else if (state.choirSelectMode === "lyrics") {
-    $("choir-lyrics-idx").value = number;
-    const lyricsStatus = $("choir-lyrics-status");
-    lyricsStatus.textContent = "✓ " + text.substring(0, 30);
-    lyricsStatus.style.color = "var(--green)";
-    state.choirSelectMode = null;
-    hint.textContent = "선택 완료! 가사를 입력하고 생성하세요.";
-    document
-      .querySelectorAll("#gen-slides-list .slide-option")
-      .forEach((el) => {
-        if (parseInt(el.dataset.idx) === idx) el.classList.add("selected");
-      });
-  }
 }
 
 // 생성 탭 찬송가 슬롯 관리
@@ -701,10 +598,16 @@ function autoPreviewChoir() {
 
 // 통합 고기능 PPT 생성 요청 처리
 async function generatePPT() {
-  const cloud = state.config.mode === "supabase";
-  const templateFile = cloud ? "" : $("gen-template").value.trim();
-  if (!cloud && !templateFile) {
-    showAlert("generate-alert", "템플릿 파일 경로를 입력해주세요", "error");
+  // 설정 탭에서 고른 템플릿 파일 (권한 확인이 필요할 수 있어 클릭 직후에 읽는다)
+  let templateFile = null;
+  try {
+    templateFile = await TemplateLibrary.getFile();
+  } catch (e) {
+    showAlert("generate-alert", "템플릿 파일을 읽지 못했어요: " + e.message, "error");
+    return;
+  }
+  if (!templateFile) {
+    showAlert("generate-alert", "설정 탭에서 템플릿 파일을 선택해주세요", "error");
     return;
   }
 
@@ -730,6 +633,7 @@ async function generatePPT() {
   const scriptureEnabled = $("scripture-enabled").checked;
   const scTitleIdx = $("sc-title-idx").value;
   const scLyricsIdx = $("sc-lyrics-idx").value;
+  const scriptureInput = scriptureEnabled ? readScriptureInput() : null;
   if (scriptureEnabled) {
     if (!scLyricsIdx) {
       showAlert(
@@ -739,10 +643,10 @@ async function generatePPT() {
       );
       return;
     }
-    if (!state.scriptureVerses.length) {
+    if (!scriptureInput) {
       showAlert(
         "generate-alert",
-        "성경 구절을 먼저 가져오세요 (📖 구절 가져오기)",
+        "성경 구절의 책·장·시작절을 입력해주세요",
         "error",
       );
       return;
@@ -753,9 +657,12 @@ async function generatePPT() {
   $("generate-alert").innerHTML = "";
 
   try {
+    // 입력된 구절을 생성 시점에 읽어서 본문 확보 (이미 같은 입력으로 받았다면 재사용)
+    if (scriptureInput) await loadScriptureForInput(scriptureInput);
+
     const formData = new FormData();
+    formData.append("template", templateFile, templateFile.name);
     const payload = {
-      ...(cloud ? {} : { template_file: templateFile }),
       hymn_slots: state.genSlots.map((s, i) => {
         let upload_key = null;
         if (s.upload_file) {
@@ -831,28 +738,67 @@ async function generatePPT() {
 }
 
 // 설정(Config) 탭 찬송가 슬롯 관리
+let cfgSlotEditMode = false;
+
+const escapeAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+
 function renderCfgSlots() {
   const list = $("cfg-slot-list");
   list.innerHTML = "";
   let cfgSlots = state.config.hymn_slots || [];
+  const editBtn = $("cfg-slot-edit-btn");
+  if (editBtn) editBtn.textContent = cfgSlotEditMode ? "✓ 수정 완료" : "✏️ 수정";
+
   cfgSlots.forEach((slot, idx) => {
     const div = document.createElement("div");
     div.style.cssText =
       "display:flex;gap:10px;align-items:center;background:var(--dark3);border:1px solid #4a4020;border-radius:8px;padding:10px 14px;";
-    div.innerHTML = `
-      <span style="color:var(--gold);font-weight:600;font-size:13px;flex:1">${
-        slot.name
-      }</span>
-      <span style="color:var(--text-light);font-size:12px">슬라이드 ${
-        slot.after_slide_index + 1
-      } 이후</span>
-      <button class="btn btn-danger" onclick="removeCfgSlot(${idx})">✕</button>
-    `;
+    const skip = `<label class="skip-toggle" style="margin:0"><input type="checkbox" ${
+      slot.default_skip ? "checked" : ""
+    } onchange="toggleCfgSlotDefaultSkip(${idx})"> 기본 스킵</label>`;
+    const del = `<button class="btn btn-danger" onclick="removeCfgSlot(${idx})">✕</button>`;
+
+    if (cfgSlotEditMode) {
+      div.innerHTML = `
+        <input type="text" value="${escapeAttr(slot.name)}" placeholder="슬롯 이름"
+          style="flex:1" oninput="updateCfgSlot(${idx}, 'name', this.value)">
+        <span style="color:var(--text-light);font-size:12px;white-space:nowrap">슬라이드</span>
+        <input type="number" min="1" value="${slot.after_slide_index + 1}"
+          style="width:80px" oninput="updateCfgSlot(${idx}, 'after', this.value)">
+        <span style="color:var(--text-light);font-size:12px;white-space:nowrap">이후</span>
+        ${skip}${del}
+      `;
+    } else {
+      div.innerHTML = `
+        <span style="color:var(--gold);font-weight:600;font-size:13px;flex:1">${slot.name}</span>
+        <span style="color:var(--text-light);font-size:12px">슬라이드 ${
+          slot.after_slide_index + 1
+        } 이후</span>
+        ${skip}${del}
+      `;
+    }
     list.appendChild(div);
   });
   if (state.genSlots.length === 0 && cfgSlots.length > 0) {
     state.genSlots = cfgSlots.map(createGenSlot);
     renderSlots();
+  }
+}
+
+// 수정 모드 전환: 슬롯 이름 / 몇 번째 슬라이드 이후인지 편집
+function toggleCfgSlotEdit() {
+  cfgSlotEditMode = !cfgSlotEditMode;
+  renderCfgSlots();
+}
+
+// 수정 모드 입력값을 설정에 반영 (재렌더하지 않아 입력 중 포커스가 유지됨)
+function updateCfgSlot(idx, field, value) {
+  const slot = state.config.hymn_slots[idx];
+  if (field === "name") {
+    slot.name = value;
+  } else {
+    const n = parseInt(value);
+    if (n >= 1) slot.after_slide_index = n - 1;
   }
 }
 
@@ -873,30 +819,17 @@ function addCfgSlot() {
   renderCfgSlots();
 }
 
+function toggleCfgSlotDefaultSkip(idx) {
+  const slot = state.config.hymn_slots[idx];
+  slot.default_skip = !slot.default_skip;
+}
+
 function removeCfgSlot(idx) {
   state.config.hymn_slots.splice(idx, 1);
   renderCfgSlots();
 }
 
-async function checkTemplate() {
-  const file = $("cfg-template").value.trim();
-  const data = await postJSON("/api/template-info", { template_file: file });
-  if (data.error) {
-    showAlertMessage("cfg-template-status", "❌ " + data.error, "var(--red)");
-  } else {
-    showAlertMessage(
-      "cfg-template-status",
-      `✓ 슬라이드 ${data.total}장`,
-      "var(--green)",
-    );
-    state.config.template_file = file;
-  }
-}
-
 async function saveConfig() {
-  if (state.config.mode !== "supabase")
-    state.config.template_file = $("cfg-template").value.trim();
-
   // 성가대/성경구절/추가구절 슬라이드 번호 기본값 캐싱
   const readIdx = (id) => {
     const v = $(id)?.value;
@@ -920,9 +853,6 @@ async function saveConfig() {
     showAlert("cfg-alert", "❌ " + e.message, "error");
     return;
   }
-
-  if (state.config.template_file)
-    $("gen-template").value = state.config.template_file;
 
   if (state.config.hymn_slots) {
     state.genSlots = state.config.hymn_slots.map(createGenSlot);

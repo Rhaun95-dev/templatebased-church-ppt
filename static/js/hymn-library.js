@@ -66,7 +66,11 @@ const HymnLibrary = (() => {
 
   async function pickFolder(onPicked) {
     if (window.showDirectoryPicker) {
-      handle = await window.showDirectoryPicker({ mode: "read" });
+      const prev = handle || (await loadHandle());  // 이전에 고른 폴더에서 시작
+      handle = await window.showDirectoryPicker({
+        mode: "read",
+        ...(prev ? { startIn: prev } : {}),
+      });
       if (onPicked) onPicked();
       await readHandle(handle);
       saveHandle(handle);
@@ -98,8 +102,19 @@ const HymnLibrary = (() => {
     return true;
   }
 
+  // 이미 권한이 허용된 경우에만 조용히 복원 (권한 팝업 없이 시도)
+  async function restoreIfGranted() {
+    try {
+      const h = await loadHandle();
+      if (!h || (await h.queryPermission({ mode: "read" })) !== "granted") return false;
+      handle = h;
+      await readHandle(h);
+      return true;
+    } catch (e) { return false; }
+  }
+
   return {
-    pickFolder, restore,
+    pickFolder, restore, restoreIfGranted,
     find: (n) => byNumber.get(Number(n)) || null,
     get count() { return byNumber.size; },
     get ready() { return byNumber.size > 0; },

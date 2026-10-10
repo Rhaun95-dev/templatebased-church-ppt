@@ -31,71 +31,11 @@
 
       <div id="tab-generate" class="tab-panel active">
         <div class="card">
-          <div class="card-title">템플릿 파일</div>
-          <div id="gen-template-row">
-            <label>이번 주 템플릿 파일 경로</label>
-            <div class="path-input-row">
-              <input
-                type="text"
-                id="gen-template"
-                placeholder="C:\Church\template_2024.pptx"
-              />
-              <button
-                class="btn btn-outline btn-sm"
-                onclick="loadTemplateSlides()"
-              >
-                슬라이드 불러오기
-              </button>
-            </div>
-          </div>
-          <div id="cloud-template-box" style="display: none">
-            <label>이번 주 템플릿 파일 (.pptx)</label>
-            <div class="path-input-row">
-              <input type="file" id="cloud-template-file" accept=".pptx" />
-              <button
-                class="btn btn-outline btn-sm"
-                onclick="uploadCloudTemplate()"
-              >
-                업로드
-              </button>
-            </div>
-            <div class="path-status" id="cloud-template-status"></div>
-          </div>
-          <div class="path-status" id="gen-template-status"></div>
-
-          <div id="gen-slide-picker" style="display: none; margin-top: 12px">
-            <label
-              >슬라이드 목록
-              <span style="color: var(--text-light); font-size: 11px"
-                >— 성가대 슬라이드 클릭으로 선택</span
-              ></label
-            >
-            <div class="slide-picker" id="gen-slides-list"></div>
-            <p
-              class="section-hint"
-              id="gen-select-hint"
-              style="margin-top: 6px"
-            >
-              제목 슬라이드를 클릭하세요
-            </p>
-          </div>
-        </div>
-
-        <div class="card">
           <div class="card-title">찬송가 삽입 위치 설정</div>
           <p class="section-hint">
             각 슬롯마다 찬송가 번호를 입력하세요. 스킵하면 해당 위치는
             건너뜁니다.
           </p>
-          <div class="path-input-row" id="hymn-banner-row">
-            <div class="path-status" id="hymn-banner" style="flex: 1"></div>
-            <button class="btn btn-outline btn-sm" onclick="chooseHymnFolder()">
-              📁 폴더 선택
-            </button>
-            <button class="btn btn-outline btn-sm" onclick="restoreHymnFolder()">
-              이전 폴더
-            </button>
-          </div>
           <div class="slot-list" id="slot-list"></div>
           <div class="add-slot-row">
             <div style="flex: 1">
@@ -351,22 +291,6 @@
               </div>
             </div>
 
-            <button
-              class="btn btn-outline btn-sm"
-              style="margin-top: 10px"
-              onclick="fetchScripture()"
-            >
-              📖 구절 가져오기
-            </button>
-            <span
-              id="sc-fetch-status"
-              style="
-                font-size: 12px;
-                color: var(--text-light);
-                margin-left: 10px;
-              "
-            ></span>
-
             <div id="sc-preview" style="display: none; margin-top: 14px">
               <div
                 id="sc-ref-badge"
@@ -381,35 +305,6 @@
                   margin-bottom: 10px;
                 "
               ></div>
-              <div
-                id="sc-preview-toggle"
-                onclick="toggleScripturePreview()"
-                style="
-                  color: var(--text-light);
-                  font-size: 11px;
-                  cursor: pointer;
-                  margin-bottom: 4px;
-                "
-              >
-                ▶ 슬라이드 분할 미리보기
-              </div>
-              <div
-                id="sc-slide-preview"
-                style="display: none; flex-direction: column; gap: 8px"
-              ></div>
-              <div
-                id="sc-preview-close"
-                onclick="toggleScripturePreview()"
-                style="
-                  display: none;
-                  color: var(--text-light);
-                  font-size: 11px;
-                  cursor: pointer;
-                  margin-top: 6px;
-                "
-              >
-                접기
-              </div>
             </div>
 
             <div
@@ -598,27 +493,21 @@
               <button class="btn btn-outline btn-sm" onclick="chooseHymnFolder()">
                 📁 찬송가 폴더 선택
               </button>
-              <button class="btn btn-outline btn-sm" onclick="restoreHymnFolder()">
-                이전 폴더 불러오기
-              </button>
             </div>
             <div class="path-status" id="hymn-lib-status"></div>
-            <p class="section-hint">
-              Google Drive에서 찬송가 폴더를 한 번 내려받아 선택하세요. 선택한
-              곡만 업로드됩니다.
-            </p>
           </div>
 
-          <div id="cfg-template-row">
-            <label>기본 템플릿 파일 경로</label>
+          <div id="cfg-template-row" style="margin-top: 16px">
+            <label>기본 템플릿 파일 (내 컴퓨터)</label>
             <div class="path-input-row">
               <input
                 type="text"
-                id="cfg-template"
-                placeholder="C:\Church\template.pptx"
+                id="cfg-template-display"
+                readonly
+                placeholder="선택된 파일 없음"
               />
-              <button class="btn btn-outline btn-sm" onclick="checkTemplate()">
-                확인
+              <button class="btn btn-outline btn-sm" onclick="chooseTemplateFile()">
+                📄 템플릿 파일 선택
               </button>
             </div>
             <div class="path-status" id="cfg-template-status"></div>
@@ -626,7 +515,22 @@
 
           <div class="sep"></div>
 
-          <label>기본 찬송가 슬롯 설정</label>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <label style="margin: 0">기본 찬송가 슬롯 설정</label>
+            <button
+              id="cfg-slot-edit-btn"
+              class="btn btn-outline btn-sm"
+              onclick="toggleCfgSlotEdit()"
+            >
+              ✏️ 수정
+            </button>
+          </div>
           <p class="section-hint">
             매주 같은 위치에 찬송가를 넣는다면 여기서 고정 슬롯을
             설정해두세요.<br />설정 저장 후 "PPT 생성" 탭에 자동으로
@@ -693,6 +597,7 @@
 
     <script defer src="/static/js/api.js"></script>
     <script defer src="/static/js/hymn-library.js"></script>
+    <script defer src="/static/js/template-library.js"></script>
     <script defer src="/static/js/service.js"></script>
     <script defer src="/static/js/app.js"></script>
   </body>
