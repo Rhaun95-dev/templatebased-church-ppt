@@ -1,0 +1,288 @@
+/* Tailwind 입력 파일. 빌드 결과는 static/tailwind.css (직접 수정하지 않는다).
+   빌드: npx --yes tailwindcss@3.4.17 -c tailwind.config.js -i static/src/input.css -o static/tailwind.css --minify
+   색 값의 출처: 디자인 시스템 시안 A (navy-dark / navy-light).
+   테마 전환: <html data-theme="navy-dark"> 또는 "navy-light". 값이 없으면 다크가 기본이다. */
+
+:root,
+[data-theme="navy-dark"] {
+  color-scheme: dark;
+  --surface: #070d1f;
+  --surface-raised: #0e1a3a;
+  --ink: #e8eeff;
+  --muted: #9aa8cf;
+  --line: #1f2f5e;
+  --brand: #2a62f5;
+  --on-brand: #ffffff;
+  --brand-text: #7ea2ff;
+  --brand-soft: #2a62f533;
+  --success: #4ade80;
+  --danger: #ff7a7a;
+}
+
+[data-theme="navy-light"] {
+  color-scheme: light;
+  --surface: #f6f8fd;
+  --surface-raised: #ffffff;
+  --ink: #0b1530;
+  --muted: #4a5678;
+  --line: #d9e1f1;
+  --brand: #2a62f5;
+  --on-brand: #ffffff;
+  --brand-text: #2a62f5;
+  --brand-soft: #2a62f51a;
+  --success: #15803d;
+  --danger: #c62828;
+}
+
+@tailwind base;
+
+@layer base {
+  body {
+    @apply min-h-screen bg-surface font-sans text-ink antialiased;
+  }
+  label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink;
+  }
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  textarea,
+  select {
+    @apply w-full rounded-md border border-line bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-muted placeholder:opacity-70 focus:border-brand focus:shadow-focus disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  textarea {
+    @apply min-h-[120px] resize-y leading-relaxed;
+  }
+  select option {
+    @apply bg-raised;
+  }
+  /* 번호 입력칸의 위아래 화살표는 숨긴다 (세 자리 칸을 좁게 쓰기 위해) */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@tailwind components;
+
+@layer components {
+  /* 탭 */
+  .tab-btn {
+    @apply flex-1 cursor-pointer rounded-md border-0 bg-transparent px-2 py-2.5 text-sm text-ink transition-colors hover:bg-brand-soft sm:px-4;
+  }
+  .tab-btn.active {
+    @apply bg-brand font-semibold text-on-brand hover:bg-brand;
+  }
+  .tab-panel {
+    @apply hidden;
+  }
+  .tab-panel.active {
+    @apply block;
+  }
+  .icon-btn {
+    @apply flex h-10 w-10 flex-none cursor-pointer items-center justify-center rounded-md border border-line bg-raised text-lg text-ink transition-colors hover:bg-brand-soft;
+  }
+  .icon-btn[aria-pressed="true"] {
+    @apply border-brand bg-brand text-on-brand;
+  }
+
+  /* 테마 슬라이드 토글 (🌙 / ☀️) */
+  .theme-switch {
+    @apply relative mb-0 inline-block h-8 w-[62px] flex-none cursor-pointer;
+  }
+  .theme-switch input {
+    @apply absolute h-0 w-0 opacity-0;
+  }
+  .theme-track {
+    @apply absolute inset-0 flex items-center justify-between rounded-full border border-line bg-surface px-2 text-sm leading-none transition-colors;
+  }
+  .theme-thumb {
+    @apply absolute left-0.5 top-0.5 h-6 w-7 rounded-full bg-brand transition-transform;
+  }
+  .theme-switch input:checked ~ .theme-track .theme-thumb {
+    @apply translate-x-7;
+  }
+  .theme-switch input:focus-visible ~ .theme-track {
+    @apply shadow-focus;
+  }
+
+  /* 카드 */
+  .card {
+    @apply mb-5 rounded-lg border border-line bg-raised p-4 sm:p-6;
+  }
+  .card-title {
+    @apply mb-4 text-base font-semibold text-ink;
+  }
+  .section-hint {
+    @apply mt-2 text-xs leading-relaxed text-muted;
+  }
+  .sep {
+    @apply my-5 h-px bg-line;
+  }
+
+  /* 버튼 */
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-5 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-gold {
+    @apply bg-brand text-on-brand hover:brightness-110;
+  }
+  .btn-outline {
+    @apply border-line bg-transparent text-ink hover:bg-brand-soft;
+  }
+  .btn-danger {
+    @apply border-line bg-transparent px-3 py-1.5 text-xs text-danger hover:bg-brand-soft;
+  }
+  .btn-sm {
+    @apply px-3.5 py-1.5 text-xs;
+  }
+  .btn-generate {
+    @apply mt-2 w-full rounded-lg border-0 bg-brand py-3.5 text-base font-bold tracking-wide text-on-brand shadow-card hover:brightness-110;
+  }
+
+  /* 찬송가 슬롯: 모바일은 2줄(이름·이후·스킵 / 번호·곡명·파일), PC는 1줄 */
+  .slot-list {
+    @apply flex flex-col gap-2.5;
+  }
+  .slot-item {
+    @apply grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface px-3.5 py-3 transition-colors sm:flex sm:gap-3;
+  }
+  .slot-item.skipped {
+    @apply opacity-50;
+  }
+  .slot-head {
+    @apply flex min-w-0 items-center gap-2 sm:min-w-[210px];
+  }
+  .slot-label {
+    @apply whitespace-nowrap text-sm font-semibold text-ink;
+  }
+  .slot-item .after-slide {
+    @apply whitespace-nowrap text-xs text-muted;
+  }
+  .slot-hymn-search {
+    @apply flex min-w-0 items-center gap-2 max-sm:order-3 max-sm:col-span-2 sm:flex-1;
+  }
+  .slot-hymn-search input[type="number"] {
+    @apply w-16 flex-none px-2 py-1.5 text-center;
+  }
+  .hymn-title-display {
+    @apply flex min-h-8 min-w-0 flex-1 items-center truncate rounded-sm bg-brand-soft px-2 text-[13px] text-ink;
+  }
+  .hymn-title-display.found {
+    @apply text-success;
+  }
+  .hymn-title-display.not-found {
+    @apply text-danger;
+  }
+  .skip-toggle {
+    @apply mb-0 flex cursor-pointer select-none items-center gap-1.5 whitespace-nowrap text-xs text-muted max-sm:order-2 max-sm:justify-self-end;
+  }
+  .skip-toggle input {
+    @apply m-0 h-4 w-4 cursor-pointer;
+    accent-color: var(--brand);
+  }
+
+  /* 성가대·성경 구절 */
+  .choir-slide-select {
+    @apply mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2;
+  }
+  .section-toggle {
+    @apply mb-3.5 flex items-center justify-between;
+  }
+  .section-toggle-label {
+    @apply text-[15px] font-semibold text-ink;
+  }
+  .toggle-switch {
+    @apply relative inline-block h-6 w-11 flex-none;
+  }
+  .toggle-switch input {
+    @apply hidden;
+  }
+  .toggle-switch .slider {
+    @apply absolute inset-0 cursor-pointer rounded-full border border-line bg-line transition-colors;
+  }
+  .toggle-switch .slider::before {
+    content: "";
+    @apply absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-raised transition-transform;
+  }
+  .toggle-switch input:checked + .slider {
+    @apply border-brand bg-brand;
+  }
+  .toggle-switch input:checked + .slider::before {
+    @apply translate-x-5 bg-on-brand;
+  }
+  .choir-section,
+  .scripture-section {
+    @apply transition-opacity;
+  }
+  .choir-section.disabled,
+  .scripture-section.disabled {
+    @apply pointer-events-none opacity-[0.35];
+  }
+  .preview-slide-card {
+    @apply rounded-md border border-line bg-surface p-3;
+  }
+  .preview-slide-card .slide-no {
+    @apply mb-1.5 text-[11px] font-semibold text-ink;
+  }
+  .preview-slide-card .slide-content {
+    @apply whitespace-pre-line text-[13px] leading-[1.7] text-ink;
+  }
+  .ev-item {
+    @apply flex items-start gap-3 rounded-md border border-line bg-surface px-3.5 py-2.5;
+  }
+  .ev-item-info {
+    @apply flex-1;
+  }
+  .ev-item-ref {
+    @apply mb-1 text-xs font-semibold text-ink;
+  }
+  .ev-item-slide {
+    @apply text-[11px] text-muted;
+  }
+
+  /* 설정 */
+  .path-input-row {
+    @apply flex flex-wrap items-start gap-2;
+  }
+  .path-input-row input {
+    @apply min-w-0 flex-1;
+  }
+  .path-status {
+    @apply mt-1.5 min-h-4 text-xs max-sm:empty:hidden;
+  }
+  .add-slot-row {
+    @apply mt-3 flex flex-wrap items-end gap-2.5;
+  }
+
+  /* 알림·로딩 */
+  .alert {
+    @apply mt-3 rounded-md border bg-surface px-4 py-3 text-[13px];
+  }
+  .alert-error {
+    @apply border-danger text-danger;
+  }
+  .alert-success {
+    @apply border-success text-success;
+  }
+  .loading {
+    @apply hidden p-5 text-center;
+  }
+  .spinner {
+    @apply inline-block h-7 w-7 animate-spin rounded-full border-[3px] border-line border-t-brand;
+  }
+
+  /* 로그인 */
+  .login-overlay {
+    @apply fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 p-4;
+  }
+  .login-box {
+    @apply flex w-full max-w-xs flex-col gap-3 rounded-lg border border-line bg-raised p-6;
+  }
+}
+
+@tailwind utilities;

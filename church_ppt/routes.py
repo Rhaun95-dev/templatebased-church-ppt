@@ -23,9 +23,27 @@ PPTX_MIMETYPE = (
 )
 
 
+def _asset_version():
+    """프론트 파일 수정 시각 중 최댓값. 바뀌면 브라우저가 옛 JS/CSS를 쓰지 않게 한다."""
+    static = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+    newest = 0
+    for sub in ("tailwind.css", "js"):
+        path = os.path.join(static, sub)
+        if os.path.isdir(path):
+            paths = [os.path.join(path, f) for f in os.listdir(path)]
+        else:
+            paths = [path]
+        for p in paths:
+            try:
+                newest = max(newest, int(os.path.getmtime(p)))
+            except OSError:
+                pass
+    return newest
+
+
 @bp.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", asset_v=_asset_version())
 
 
 @bp.route("/api/health")

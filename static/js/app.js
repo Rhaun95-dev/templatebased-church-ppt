@@ -4,16 +4,46 @@
  * ══════════════════════════════════════════════════
  */
 
-// 탭 전환 핸들러
-function switchTab(name, btn) {
+// 화면 전환: 찬송가 / 성가대 / 성경 구절 탭, 그리고 헤더 톱니바퀴의 설정
+let lastMainTab = "hymn";
+
+function showPanel(name) {
+  const settings = name === "settings";
   document
     .querySelectorAll(".tab-panel")
-    .forEach((p) => p.classList.remove("active"));
+    .forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
   document
     .querySelectorAll(".tab-btn")
-    .forEach((b) => b.classList.remove("active"));
-  $("tab-" + name).classList.add("active");
-  btn.classList.add("active");
+    .forEach((b) => b.classList.toggle("active", !settings && b.dataset.tab === name));
+  // 설정 화면에서는 탭 바와 PPT 생성 영역을 숨긴다
+  $("tabs").classList.toggle("hidden", settings);
+  $("generate-bar").classList.toggle("hidden", settings);
+  $("settings-btn").setAttribute("aria-pressed", String(settings));
+}
+
+function switchTab(name) {
+  lastMainTab = name;
+  showPanel(name);
+}
+
+// 헤더 톱니바퀴: 설정을 열고, 다시 누르면 보던 탭으로 돌아간다
+function toggleSettings() {
+  const open = $("tab-settings").classList.contains("active");
+  showPanel(open ? lastMainTab : "settings");
+}
+
+// 화면 테마 (navy-dark / navy-light)
+function setTheme(name) {
+  document.documentElement.dataset.theme = name;
+  try {
+    localStorage.setItem("theme", name);
+  } catch (e) {}
+  syncThemeToggle();
+}
+
+function syncThemeToggle() {
+  const el = $("theme-toggle");
+  if (el) el.checked = document.documentElement.dataset.theme === "navy-light";
 }
 
 // 섹션 활성화 체크박스에 따라 대상 섹션의 disabled 표시 토글
@@ -61,6 +91,8 @@ function toggleChoirPreview() {
 
 // 초기 로딩 진입점 호출
 document.addEventListener("DOMContentLoaded", () => {
+  switchTab("hymn");
+  syncThemeToggle();
   updateHymnStatus();
   HymnLibrary.restoreIfGranted().then((ok) => ok && updateHymnStatus());
   TemplateLibrary.restore().then(() => updateTemplateStatus());
@@ -88,3 +120,8 @@ async function submitLogin() {
   }
   $("login-error").textContent = (await res.json()).error || "로그인 실패";
 }
+
+// 뒤로가기/앞으로가기 캐시(bfcache)로 복원돼도 설정 화면에 머물지 않게 한다
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) switchTab("hymn");
+});
