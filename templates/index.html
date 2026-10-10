@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>교회 PPT 자동화</title>
+    <title>PPT 생성</title>
     <script>
       // 저장된 테마(없으면 시스템 설정)를 첫 페인트 전에 적용
       try {
@@ -31,10 +31,7 @@
         >✝</span
       >
       <div class="min-w-0 flex-1">
-        <h1 class="text-lg font-bold leading-6 text-ink">교회 PPT 자동화</h1>
-        <p class="truncate text-xs leading-4 text-ink">
-          찬송가 삽입 · 성가대 가사 분할
-        </p>
+        <h1 class="text-lg font-bold leading-6 text-ink">PPT 생성</h1>
       </div>
       <label class="theme-switch">
         <input
@@ -153,7 +150,7 @@
             </label>
             <textarea
               id="choir-lyrics"
-              placeholder="1절&#10;주님의 은혜 감사해요&#10;늘 함께하시네&#10;&#10;2절&#10;어둠 속에서도 빛 되시는&#10;주 나의 구원자"
+              placeholder="주님의 은혜 감사해요&#10;늘 함께하시네&#10;&#10;어둠 속에서도 빛 되시는&#10;주 나의 구원자"
               oninput="autoPreviewChoir()"
             ></textarea>
 
@@ -459,7 +456,7 @@
           </div>
           <p class="section-hint">
             매주 같은 위치에 찬송가를 넣는다면 여기서 고정 슬롯을
-            설정해두세요.<br />설정 저장 후 "찬송가" 탭에 자동으로
+            설정해두세요.<br />설정 저장 후 찬송가 슬롯에 자동으로
             불러와집니다.
           </p>
 

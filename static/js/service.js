@@ -92,7 +92,7 @@ function updateTemplateStatus(errorText) {
   } else if (TemplateLibrary.ready) {
     showAlertMessage("cfg-template-status", "✓ " + TemplateLibrary.name, "var(--success)");
   } else {
-    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--ink)");
+    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--muted)");
   }
 }
 
@@ -122,7 +122,7 @@ function updateHymnStatus(errorText) {
     color = "var(--success)";
   } else {
     text = "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
-    color = "var(--ink)";
+    color = "var(--muted)";
   }
   showAlertMessage("hymn-lib-status", text, color);
   const disp = $("cfg-hymn-folder-display");
@@ -823,16 +823,16 @@ function renderCfgSlots() {
       div.innerHTML = `
         <input type="text" value="${escapeAttr(slot.name)}" placeholder="슬롯 이름"
           class="min-w-0 flex-1" oninput="updateCfgSlot(${idx}, 'name', this.value)">
-        <span class="whitespace-nowrap text-xs text-ink">슬라이드</span>
+        <span class="whitespace-nowrap text-xs text-muted">슬라이드</span>
         <input type="number" min="1" value="${slot.after_slide_index + 1}"
           class="!w-20" oninput="updateCfgSlot(${idx}, 'after', this.value)">
-        <span class="whitespace-nowrap text-xs text-ink">이후</span>
+        <span class="whitespace-nowrap text-xs text-muted">이후</span>
         ${skip}${del}
       `;
     } else {
       div.innerHTML = `
         <span class="min-w-[90px] flex-1 text-[13px] font-semibold text-ink">${slot.name}</span>
-        <span class="text-xs text-ink">슬라이드 ${
+        <span class="text-xs text-muted">슬라이드 ${
           slot.after_slide_index + 1
         } 이후</span>
         ${skip}${del}
