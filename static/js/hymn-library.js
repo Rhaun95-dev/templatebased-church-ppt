@@ -10,7 +10,8 @@ function parseHymnFilename(name) {
 }
 
 const HymnLibrary = (() => {
-  const DB = "church-ppt", STORE = "handles", KEY = "hymn-folder";
+  const DB = "church-ppt", STORE = "handles", KEY = "hymn-folder", FILES_KEY = "hymn-files";
+  const PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   let byNumber = new Map();
   let handle = null;
   let folderName = "";
@@ -23,17 +24,17 @@ const HymnLibrary = (() => {
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
-  async function saveHandle(h) {
+  async function saveHandle(h, key = KEY) {
     try {
       const db = await idb();
-      db.transaction(STORE, "readwrite").objectStore(STORE).put(h, KEY);
+      db.transaction(STORE, "readwrite").objectStore(STORE).put(h, key);
     } catch (e) { /* 기억하지 못해도 동작에는 영향 없음 */ }
   }
-  async function loadHandle() {
+  async function loadHandle(key = KEY) {
     try {
       const db = await idb();
       return await new Promise((res) => {
-        const r = db.transaction(STORE).objectStore(STORE).get(KEY);
+        const r = db.transaction(STORE).objectStore(STORE).get(key);
         r.onsuccess = () => res(r.result || null);
         r.onerror = () => res(null);
       });
@@ -64,7 +65,34 @@ const HymnLibrary = (() => {
     index(files);
   }
 
+  // 폴더 선택을 지원하지 않는 브라우저(핸드폰): 파일 핸들 목록을 기억한다.
+  // 파일은 실제로 쓸 때 권한을 확인하고 최신 내용을 읽는다.
+  function indexFileHandles(hs) {
+    folderName = `선택한 파일 ${hs.length}개`;
+    index(hs.map((h) => ({
+      name: h.name,
+      get: async () => {
+        if ((await h.queryPermission({ mode: "read" })) !== "granted" &&
+            (await h.requestPermission({ mode: "read" })) !== "granted") {
+          throw new Error("찬송가 파일 읽기 권한이 필요해요");
+        }
+        return h.getFile();
+      },
+    })));
+  }
+
   async function pickFolder(onPicked) {
+    if (!window.showDirectoryPicker && window.showOpenFilePicker) {
+      const hs = await window.showOpenFilePicker({
+        multiple: true,
+        types: [{ description: "찬송가 PPT", accept: { [PPTX_TYPE]: [".pptx"] } }],
+      });
+      if (onPicked) onPicked();
+      handle = null;
+      indexFileHandles(hs);
+      saveHandle(hs, FILES_KEY);
+      return byNumber.size;
+    }
     if (window.showDirectoryPicker) {
       const prev = handle || (await loadHandle());  // 이전에 고른 폴더에서 시작
       handle = await window.showDirectoryPicker({
@@ -106,7 +134,13 @@ const HymnLibrary = (() => {
   async function restoreIfGranted() {
     try {
       const h = await loadHandle();
-      if (!h || (await h.queryPermission({ mode: "read" })) !== "granted") return false;
+      if (!h) {  // 파일 핸들 목록(핸드폰) — 이름만으로 색인하고 권한은 파일을 읽을 때 확인
+        const hs = window.showDirectoryPicker ? null : await loadHandle(FILES_KEY);
+        if (!hs || !hs.length) return false;
+        indexFileHandles(hs);
+        return true;
+      }
+      if ((await h.queryPermission({ mode: "read" })) !== "granted") return false;
       handle = h;
       await readHandle(h);
       return true;
