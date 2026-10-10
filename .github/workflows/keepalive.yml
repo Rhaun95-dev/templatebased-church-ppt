@@ -3,7 +3,7 @@ name: keepalive
 # Requires the repository variable APP_URL (no secrets needed).
 on:
   schedule:
-    - cron: "0 3 */3 * *"
+    - cron: "0 12 */7 * *"
   workflow_dispatch:
 jobs:
   ping:
