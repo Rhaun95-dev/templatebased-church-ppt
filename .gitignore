@@ -221,3 +221,7 @@ context_summary.md
 CLAUDE.md
 docs/
 todo/
+.ai-context/
+
+# 이전 버전이 서버에 저장한 템플릿 (더 이상 사용하지 않음)
+local_data/

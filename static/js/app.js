@@ -59,21 +59,11 @@ function toggleChoirPreview() {
   toggleListVisibility($("choir-preview-list"), $("choir-preview-close"));
 }
 
-// 성경 미리보기 레이아웃 토글
-function toggleScripturePreview() {
-  const tog = $("sc-preview-toggle");
-  const opening = toggleListVisibility(
-    $("sc-slide-preview"),
-    $("sc-preview-close"),
-  );
-  tog.textContent = opening
-    ? "▼ 슬라이드 분할 미리보기"
-    : "▶ 슬라이드 분할 미리보기";
-}
-
 // 초기 로딩 진입점 호출
 document.addEventListener("DOMContentLoaded", () => {
   updateHymnStatus();
+  HymnLibrary.restoreIfGranted().then((ok) => ok && updateHymnStatus());
+  TemplateLibrary.restore().then(() => updateTemplateStatus());
   init().then(renderCfgSlots);
 });
 
