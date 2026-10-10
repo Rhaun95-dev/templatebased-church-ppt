@@ -1,22 +1,23 @@
 """주보 PPT 생성: 템플릿에 찬송가·성가대 가사·성경 구절 슬라이드를 삽입"""
-import os
-import shutil
-import tempfile
+import io
 from datetime import date, timedelta
 
 from pptx import Presentation
-from pptx.dml.color import RGBColor
 
 from .pptx_zip import (
-    copy_slide_from_file_zip,
-    duplicate_slide_zip,
+    Package,
+    add_black_slide,
+    copy_slide,
+    count_slides,
+    delete_slide,
+    duplicate_slide,
     embed_slide_background,
     get_slide_size,
     scale_slide_shapes,
+    slide_id_at,
 )
 from .slide_text import (
     add_chapter_title_text,
-    delete_slide,
     set_slide_choir_title,
     set_slide_lyrics,
     set_slide_text_bibel,
@@ -162,9 +163,7 @@ def build_tasks(hymn_slots, choir, scripture, extra_verses):
         hymn_file = slot.get("upload_file")
         if not hymn_file:
             continue
-        hymn_prs_tmp = Presentation(hymn_file)
-        n_hymn_slides = len(hymn_prs_tmp.slides)
-        del hymn_prs_tmp
+        n_hymn_slides = count_slides(Package.from_path(hymn_file))
         tasks.append(
             {
                 "type": "hymn",
@@ -179,78 +178,69 @@ def build_tasks(hymn_slots, choir, scripture, extra_verses):
 
 
 # ── 작업 실행 ─────────────────────────────────
+#
+# 슬라이드 추가/삭제 같은 구조 변경은 메모리의 Package에서 즉시 처리하고,
+# 텍스트 채우기는 (슬라이드 sldId, 함수, 인자)로 모아 두었다가 마지막에
+# python-pptx로 한 번만 열어 적용한다. sldId는 이후 삽입으로 슬라이드
+# 위치가 밀려도 바뀌지 않으므로 인덱스 어긋남이 생기지 않는다.
 
 
 class _WorkFile:
-    """작업 중인 pptx 경로와 지금까지 늘어난 슬라이드 수(offset)"""
+    """작업 중인 pptx(메모리), 지금까지 늘어난 슬라이드 수(offset), 대기 중인 텍스트 편집"""
 
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, pkg):
+        self.pkg = pkg
         self.offset = 0
+        self.edits = []  # [(sld_id, func, args)]
+
+    def edit(self, sld_id, func, *args):
+        self.edits.append((sld_id, func, args))
 
 
 def _apply_choir_title(w, task):
-    prs = Presentation(w.path)
-    set_slide_choir_title(
-        prs.slides[task["slide_raw"] + w.offset],
-        task["song_title"],
-    )
-    prs.save(w.path)
+    sid = slide_id_at(w.pkg, task["slide_raw"] + w.offset)
+    w.edit(sid, set_slide_choir_title, task["song_title"])
 
 
 def _apply_choir_lyrics(w, task):
     paragraphs = task["paragraphs"]
     template_idx = task["template_raw"] + w.offset
 
-    prs = Presentation(w.path)
-    set_slide_lyrics(prs.slides[template_idx], paragraphs[0])
-    prs.save(w.path)
+    w.edit(slide_id_at(w.pkg, template_idx), set_slide_lyrics, paragraphs[0])
 
     for i, para in enumerate(paragraphs[1:], 1):
-        ins = template_idx + i - 1
-        new_path = duplicate_slide_zip(w.path, template_idx, ins)
-        os.unlink(w.path)
-        w.path = new_path
-        prs = Presentation(w.path)
-        set_slide_lyrics(prs.slides[ins + 1], para)
-        prs.save(w.path)
+        sid = duplicate_slide(w.pkg, template_idx, template_idx + i - 1)
+        w.edit(sid, set_slide_lyrics, para)
         w.offset += 1
 
 
 def _apply_sc_title(w, task):
-    prs = Presentation(w.path)
-    set_slide_title_scripture(
-        prs.slides[task["slide_raw"] + w.offset],
+    sid = slide_id_at(w.pkg, task["slide_raw"] + w.offset)
+    w.edit(
+        sid,
+        set_slide_title_scripture,
         task["book_name"],
         task["chapter"],
         task["verse_start"],
         task["verse_end"],
     )
-    prs.save(w.path)
+
+
+def _fill_bible_slide(slide, pair, title):
+    set_slide_text_bibel(slide, pair)
+    add_chapter_title_text(slide, title)
 
 
 def _apply_sc_verse(w, task):
     pairs = task["pairs"]
     template_idx = task["template_raw"] + w.offset
+    title = f"{task['book_name']} {task['chapter']}장"
 
-    prs = Presentation(w.path)
-    sl = prs.slides[template_idx]
-    set_slide_text_bibel(sl, pairs[0])
-    add_chapter_title_text(sl, f"{task['book_name']} {task['chapter']}장")
-    prs.save(w.path)
+    w.edit(slide_id_at(w.pkg, template_idx), _fill_bible_slide, pairs[0], title)
 
     for i, pair in enumerate(pairs[1:], 1):
-        ins = template_idx + i - 1
-        new_path = duplicate_slide_zip(w.path, template_idx, ins)
-        os.unlink(w.path)
-        w.path = new_path
-        prs = Presentation(w.path)
-        sl = prs.slides[ins + 1]
-        set_slide_text_bibel(sl, pair)
-        add_chapter_title_text(
-            sl, f"{task['book_name']} {task['chapter']}장"
-        )
-        prs.save(w.path)
+        sid = duplicate_slide(w.pkg, template_idx, template_idx + i - 1)
+        w.edit(sid, _fill_bible_slide, pair, title)
         w.offset += 1
 
 
@@ -263,93 +253,54 @@ def _apply_ev_block(w, task):
         ev_ch = str(ev.get("chapter", ""))
         pairs = [ev_verses[j : j + 2] for j in range(0, len(ev_verses), 2)]
         cur_tmpl = template_raw + w.offset  # template 슬라이드 현재 위치
+        title = f"{ev_book} {ev_ch}장"
 
         if ev_i == 0:
             # ev[0]: template 뒤에 pairs 복제 삽입 → template 삭제
             for i, pair in enumerate(pairs):
-                new_path = duplicate_slide_zip(
-                    w.path, cur_tmpl, cur_tmpl + i
-                )
-                os.unlink(w.path)
-                w.path = new_path
-                prs = Presentation(w.path)
-                sl = prs.slides[cur_tmpl + i + 1]
-                set_slide_text_bibel(sl, pair)
-                add_chapter_title_text(sl, f"{ev_book} {ev_ch}장")
-                prs.save(w.path)
+                sid = duplicate_slide(w.pkg, cur_tmpl, cur_tmpl + i)
+                w.edit(sid, _fill_bible_slide, pair, title)
 
-            prs = Presentation(w.path)
-            delete_slide(prs, cur_tmpl)
-            prs.save(w.path)
+            delete_slide(w.pkg, cur_tmpl)
             w.offset += len(pairs) - 1  # pairs개 추가 - template 1개 삭제
 
         else:
             # ev[1+]: 검은 슬라이드 삽입 → template으로 pairs 복제 삽입
             # 1) 검은 슬라이드를 cur_tmpl 바로 뒤에 삽입
-            prs = Presentation(w.path)
-            blank_layout = prs.slide_layouts[6]
-            new_slide = prs.slides.add_slide(blank_layout)
-            new_slide.background.fill.solid()
-            new_slide.background.fill.fore_color.rgb = RGBColor(0, 0, 0)
-            xml_slides = prs.slides._sldIdLst
-            last = xml_slides[-1]
-            xml_slides.remove(last)
-            xml_slides.insert(cur_tmpl + 1, last)
-            prs.save(w.path)
+            add_black_slide(w.pkg, cur_tmpl)
             w.offset += 1
 
             # 2) 검은 슬라이드 뒤에 pairs 복제 삽입
             insert_base = cur_tmpl + 1  # 검은 슬라이드 현재 위치
             for i, pair in enumerate(pairs):
-                new_path = duplicate_slide_zip(
-                    w.path, cur_tmpl, insert_base + i
-                )
-                os.unlink(w.path)
-                w.path = new_path
-                prs = Presentation(w.path)
-                sl = prs.slides[insert_base + i + 1]
-                set_slide_text_bibel(sl, pair)
-                add_chapter_title_text(sl, f"{ev_book} {ev_ch}장")
-                prs.save(w.path)
+                sid = duplicate_slide(w.pkg, cur_tmpl, insert_base + i)
+                w.edit(sid, _fill_bible_slide, pair, title)
 
             w.offset += len(pairs)  # 검은 슬라이드 offset은 위에서 이미 반영
 
 
 def _apply_hymn(w, task):
     actual_after = task["raw_after"] + w.offset
-    hymn_file = task["hymn_file"]
     n_slides = task["n_slides"]
 
     # 대상(현재 작업 중인) 프레젠테이션의 실제 슬라이드 크기(EMU)
-    dst_width, dst_height = get_slide_size(w.path)
+    dst_width, dst_height = get_slide_size(w.pkg)
 
-    hymn_fd, hymn_tmp = tempfile.mkstemp(suffix=".pptx")
-    os.close(hymn_fd)
-    shutil.copy2(hymn_file, hymn_tmp)
+    # 찬송가 파일은 메모리에서만 수정하므로 원본 임시 파일은 그대로 둔다
+    hymn = Package.from_path(task["hymn_file"])
 
     for i in range(n_slides):
-        new_tmp = embed_slide_background(hymn_tmp, i)
-        if new_tmp:
-            os.unlink(hymn_tmp)
-            hymn_tmp = new_tmp
+        embed_slide_background(hymn, i)
 
     # 찬송가 원본의 실제 슬라이드 크기(EMU)가 대상과 다르면(같은 16:9라도
     # 절대 크기가 다를 수 있음) 도형 좌표를 대상 크기 비율로 스케일해서
     # 내용이 작게 붙는 문제를 방지
     for i in range(n_slides):
-        new_tmp = scale_slide_shapes(hymn_tmp, i, dst_width, dst_height)
-        if new_tmp:
-            os.unlink(hymn_tmp)
-            hymn_tmp = new_tmp
+        scale_slide_shapes(hymn, i, dst_width, dst_height)
 
     for i in range(n_slides):
-        new_path = copy_slide_from_file_zip(
-            hymn_tmp, i, w.path, actual_after + i
-        )
-        os.unlink(w.path)
-        w.path = new_path
+        copy_slide(hymn, i, w.pkg, actual_after + i)
 
-    os.unlink(hymn_tmp)
     w.offset += n_slides
 
 
@@ -367,19 +318,20 @@ def generate_presentation(template_file, hymn_slots, choir, scripture, extra_ver
     """템플릿 복사본에 모든 작업을 적용하고 결과 pptx 바이트를 반환"""
     tasks = build_tasks(hymn_slots, choir, scripture, extra_verses)
 
-    work_fd, work_path = tempfile.mkstemp(suffix=".pptx")
-    os.close(work_fd)
-    shutil.copy2(template_file, work_path)
-    w = _WorkFile(work_path)
-    try:
-        # 정렬된 순서대로 처리, offset 누적
-        for task in tasks:
-            _HANDLERS[task["type"]](w, task)
-        with open(w.path, "rb") as f:
-            return f.read()
-    finally:
-        if w.path and os.path.exists(w.path):
-            try:
-                os.unlink(w.path)
-            except:
-                pass
+    w = _WorkFile(Package.from_path(template_file))
+
+    # 정렬된 순서대로 처리, offset 누적
+    for task in tasks:
+        _HANDLERS[task["type"]](w, task)
+
+    if not w.edits:
+        return w.pkg.to_bytes()
+
+    # 텍스트 편집은 python-pptx로 한 번만 열어서 일괄 적용
+    prs = Presentation(io.BytesIO(w.pkg.to_bytes(compress=False)))
+    slides_by_id = {s.slide_id: s for s in prs.slides}
+    for sld_id, func, args in w.edits:
+        func(slides_by_id[sld_id], *args)
+    out = io.BytesIO()
+    prs.save(out)
+    return out.getvalue()
