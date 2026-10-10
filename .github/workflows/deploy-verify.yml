@@ -1,0 +1,59 @@
+name: Deploy verify
+# CD: Render deploys master by itself once CI passes (render.yaml: autoDeployTrigger: checksPass).
+# This workflow waits until the running app reports the commit that was just merged,
+# so a failed or stuck deploy shows up as a red check instead of going unnoticed.
+# Requires the repository variable APP_URL (Settings > Secrets and variables > Actions > Variables).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Wait for Render and check health
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_URL: ${{ vars.APP_URL }}
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Wait until the new commit is live
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::notice::APP_URL is not set; skipping deploy verification"
+            exit 0
+          fi
+          url="${APP_URL%/}/api/health"
+          echo "Waiting for $url (expected commit: ${EXPECTED_SHA:-any})"
+          for i in $(seq 1 60); do
+            body="$(curl -sS --max-time 60 "$url" || true)"
+            echo "[$i] $body"
+            if echo "$body" | grep -q '"ok":[[:space:]]*true'; then
+              # Manual runs have no expected commit: healthy is enough.
+              # Render reports its commit in "commit"; keep waiting while the old build still serves.
+              if [ -z "$EXPECTED_SHA" ] || echo "$body" | grep -q "$EXPECTED_SHA"; then
+                echo "Deploy is live and healthy"
+                exit 0
+              fi
+            fi
+            sleep 20
+          done
+          echo "::error::App did not report commit ${EXPECTED_SHA} as healthy within 20 minutes"
+          exit 1
+
+      - name: Check login protection is active
+        if: ${{ vars.APP_URL != '' }}
+        run: |
+          session="$(curl -fsS --max-time 60 "${APP_URL%/}/api/session")"
+          echo "$session"
+          echo "$session" | grep -q '"auth_required":[[:space:]]*true'
