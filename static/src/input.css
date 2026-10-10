@@ -70,7 +70,13 @@
 @tailwind components;
 
 @layer components {
-  /* 화면 패널 */
+  /* 탭 */
+  .tab-btn {
+    @apply flex-1 cursor-pointer rounded-md border-0 bg-transparent px-2 py-2.5 text-sm text-ink transition-colors hover:bg-brand-soft sm:px-4;
+  }
+  .tab-btn.active {
+    @apply bg-brand font-semibold text-on-brand hover:bg-brand;
+  }
   .tab-panel {
     @apply hidden;
   }

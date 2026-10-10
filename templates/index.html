@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/tailwind.css?v={{ asset_v }}" />
   </head>
   <body>
     <header
@@ -60,8 +60,27 @@
     </header>
 
     <div class="mx-auto max-w-[900px] px-4 py-6 sm:px-6 sm:py-8">
+      <div
+        id="tabs"
+        class="mb-6 flex gap-1 rounded-lg border border-line bg-raised p-1.5"
+      >
+        <button
+          class="tab-btn active"
+          data-tab="hymn"
+          onclick="switchTab('hymn')"
+        >
+          찬송가
+        </button>
+        <button class="tab-btn" data-tab="choir" onclick="switchTab('choir')">
+          성가대
+        </button>
+        <button class="tab-btn" data-tab="bible" onclick="switchTab('bible')">
+          성경 구절
+        </button>
+      </div>
+
       <!-- 찬송가 -->
-      <div id="tab-hymn" class="tab-panel main-panel active">
+      <div id="tab-hymn" class="tab-panel active">
         <div class="card">
           <div class="card-title">찬송가 삽입 위치 설정</div>
           <p class="section-hint mb-3.5 mt-0">
@@ -92,7 +111,7 @@
       </div>
 
       <!-- 성가대 -->
-      <div id="tab-choir" class="tab-panel main-panel active">
+      <div id="tab-choir" class="tab-panel">
         <div class="card">
           <div class="section-toggle">
             <span class="section-toggle-label">성가대 가사</span>
@@ -183,7 +202,7 @@
       </div>
 
       <!-- 성경 구절 -->
-      <div id="tab-bible" class="tab-panel main-panel active">
+      <div id="tab-bible" class="tab-panel">
         <div class="card">
           <div class="section-toggle">
             <span class="section-toggle-label">성경 구절</span>
@@ -518,10 +537,10 @@
       </form>
     </div>
 
-    <script defer src="/static/js/api.js"></script>
-    <script defer src="/static/js/hymn-library.js"></script>
-    <script defer src="/static/js/template-library.js"></script>
-    <script defer src="/static/js/service.js"></script>
-    <script defer src="/static/js/app.js"></script>
+    <script defer src="/static/js/api.js?v={{ asset_v }}"></script>
+    <script defer src="/static/js/hymn-library.js?v={{ asset_v }}"></script>
+    <script defer src="/static/js/template-library.js?v={{ asset_v }}"></script>
+    <script defer src="/static/js/service.js?v={{ asset_v }}"></script>
+    <script defer src="/static/js/app.js?v={{ asset_v }}"></script>
   </body>
 </html>
