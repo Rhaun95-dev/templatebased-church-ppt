@@ -146,7 +146,9 @@ function updateHymnStatus(errorText) {
       (extra > 0 ? ` (번호 없는 파일 ${extra}개 제외)` : "");
     color = "var(--success)";
   } else {
-    text = "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
+    text = !window.showDirectoryPicker && window.showOpenFilePicker
+      ? "찬송가 파일을 선택하세요 (폴더 안 .pptx 파일을 전체 선택하면 다음부터 기억해요)"
+      : "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
     color = "var(--muted)";
   }
   showAlertMessage("hymn-lib-status", text, color);
