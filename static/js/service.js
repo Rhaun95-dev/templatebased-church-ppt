@@ -45,6 +45,26 @@ let hymnSearchTimers = {};
 let previewTimer = null;
 let bookDropdownState = {}; // keyed by dropdownId: { matches, activeIndex, statusId }
 
+const CONFIG_CACHE_KEY = "church-ppt-config";
+
+function readCachedConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_CACHE_KEY);
+    const cfg = raw ? JSON.parse(raw) : null;
+    return cfg && typeof cfg === "object" ? cfg : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeCachedConfig(cfg) {
+  try {
+    localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify(cfg));
+  } catch (e) {
+    // 저장소 사용 불가 시 캐시 없이 동작 (다음 접속에 서버에서 다시 받음)
+  }
+}
+
 // 애플리케이션 초기 데이터 바인딩
 async function init() {
   try {
@@ -54,8 +74,13 @@ async function init() {
       return;
     }
 
-    const res = await apiFetch("/api/config");
-    state.config = await res.json();
+    // 설정은 이 기기에 처음 한 번만 서버에서 받고, 이후엔 localStorage만 참고한다
+    state.config = readCachedConfig();
+    if (!state.config) {
+      const res = await apiFetch("/api/config");
+      state.config = await res.json();
+      writeCachedConfig(state.config);
+    }
     if (state.config.hymn_slots?.length > 0) {
       sortCfgSlots();
       state.genSlots = state.config.hymn_slots.map(createGenSlot);
@@ -916,6 +941,7 @@ async function saveConfig() {
     showAlert("cfg-alert", "❌ " + e.message, "error");
     return;
   }
+  writeCachedConfig(state.config);
 
   if (state.config.hymn_slots) {
     sortCfgSlots();
