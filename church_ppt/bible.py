@@ -127,13 +127,17 @@ def lookup_verses(abbr, chapter, verse_start, verse_end):
     if "error" in chapter_data:
         return {"error": f'성경 데이터 오류: {chapter_data["error"]}'}
 
+    max_verse = max(chapter_data)
     verses = []
     for v_num in range(verse_start, verse_end + 1):
         text = chapter_data.get(v_num, "")
         if text:
             verses.append({"num": v_num, "text": text})
     if not verses:
-        return {"error": f"{verse_start}~{verse_end}절을 찾을 수 없어요"}
+        return {
+            "error": f"{book_name} {chapter}장은 {max_verse}절까지 있어요",
+            "max_verse": max_verse,
+        }
 
     ref_range = (
         f"{verse_start}-{verse_end}" if verse_start != verse_end else str(verse_start)
@@ -145,4 +149,5 @@ def lookup_verses(abbr, chapter, verse_start, verse_end):
         "chapter": chapter,
         "verse_start": verse_start,
         "verse_end": verse_end,
+        "max_verse": max_verse,
     }
