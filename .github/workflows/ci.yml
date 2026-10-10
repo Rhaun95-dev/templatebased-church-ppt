@@ -1,0 +1,76 @@
+name: CI
+# Runs on every pull request and on pushes to master.
+# Render deploys master only after these checks pass (render.yaml: autoDeployTrigger: checksPass).
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python (syntax + unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Syntax check
+        run: python -m py_compile app.py church_ppt/*.py
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+  frontend:
+    name: Frontend (JS syntax + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax check
+        run: |
+          for f in static/js/*.js; do
+            node --check "$f"
+          done
+      - name: Hymn filename parser tests
+        run: node tests/js/hymn-library.test.js
+
+  secrets:
+    name: Secret scan (added lines)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan added lines for secrets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # New branches / first pushes have no usable "before" commit: scan the last commit only.
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA="$(git rev-parse HEAD~1 2>/dev/null || git hash-object -t tree /dev/null)"
+          fi
+          patterns='(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.|-----BEGIN [A-Z ]*PRIVATE KEY-----|(SUPABASE_(SERVICE_ROLE_)?KEY|API_KEY|SECRET|PASSWORD)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{12,})'
+          diff="$(git diff -U0 --diff-filter=ACM "$BASE_SHA" HEAD -- . ':!tests' | grep -E '^\+[^+]' || true)"
+          if echo "$diff" | grep -Eq "$patterns"; then
+            echo "::error::Possible secret in added lines (values hidden)"
+            echo "$diff" | grep -E "$patterns" | cut -c1-60 | sed -E 's/[=:].*/=<hidden>/'
+            exit 1
+          fi
+          if git diff --name-only --diff-filter=ACM "$BASE_SHA" HEAD | grep -Eq '(^|/)\.env($|\.)'; then
+            echo "::error::.env file added"
+            exit 1
+          fi
+          echo "No secrets found"

@@ -31,7 +31,12 @@ def index():
 @bp.route("/api/health")
 def health():
     get_storage().get_config()  # 스토리지 접근 실패 시 AppError(503) → keep-alive 겸용
-    return jsonify({"ok": True})
+    body = {"ok": True}
+    # Render가 배포한 커밋 (CD 검증 워크플로가 새 버전이 떴는지 확인할 때 사용)
+    commit = os.environ.get("RENDER_GIT_COMMIT")
+    if commit:
+        body["commit"] = commit
+    return jsonify(body)
 
 
 # ── Config ────────────────────────────────────
