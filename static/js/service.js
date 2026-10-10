@@ -88,11 +88,11 @@ function updateTemplateStatus(errorText) {
   const disp = $("cfg-template-display");
   if (disp) disp.value = TemplateLibrary.ready ? TemplateLibrary.name : "";
   if (errorText) {
-    showAlertMessage("cfg-template-status", "❌ " + errorText, "var(--red)");
+    showAlertMessage("cfg-template-status", "❌ " + errorText, "var(--danger)");
   } else if (TemplateLibrary.ready) {
-    showAlertMessage("cfg-template-status", "✓ " + TemplateLibrary.name, "var(--green)");
+    showAlertMessage("cfg-template-status", "✓ " + TemplateLibrary.name, "var(--success)");
   } else {
-    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--text-light)");
+    showAlertMessage("cfg-template-status", "템플릿 파일이 선택되지 않았어요", "var(--muted)");
   }
 }
 
@@ -114,15 +114,15 @@ function updateHymnStatus(errorText) {
   let text, color;
   if (errorText) {
     text = "❌ " + errorText;
-    color = "var(--red)";
+    color = "var(--danger)";
   } else if (HymnLibrary.ready) {
     const extra = HymnLibrary.pptxCount - HymnLibrary.count;
     text = `✓ 📁 ${HymnLibrary.folderName || "선택한 폴더"} — 번호 인식 ${HymnLibrary.count}곡` +
       (extra > 0 ? ` (번호 없는 파일 ${extra}개 제외)` : "");
-    color = "var(--green)";
+    color = "var(--success)";
   } else {
     text = "찬송가 폴더가 선택되지 않았어요 (새로고침하면 다시 선택해야 해요)";
-    color = "var(--text-light)";
+    color = "var(--muted)";
   }
   showAlertMessage("hymn-lib-status", text, color);
   const disp = $("cfg-hymn-folder-display");
@@ -133,7 +133,7 @@ function updateHymnStatus(errorText) {
 async function chooseHymnFolder() {
   try {
     await HymnLibrary.pickFolder(() => {
-      showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--text-light)");
+      showAlertMessage("hymn-lib-status", "폴더 읽는 중...", "var(--muted)");
     });
     updateHymnStatus(HymnLibrary.ready ? null : "이 폴더에서 '번호_제목.pptx' 파일을 찾지 못했어요");
   } catch (e) {
@@ -226,11 +226,11 @@ function renderBookDropdown(dropdownId) {
     const active = i === entry.activeIndex;
     const item = document.createElement("div");
     item.dataset.idx = i;
-    item.style.cssText =
-      "padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #2a2010;display:flex;gap:8px;" +
-      (active ? "background:rgba(212,175,55,0.18);" : "");
-    item.innerHTML = `<span style="color:var(--gold);font-weight:600;min-width:36px">${b.abbr}</span>
-      <span style="color:var(--cream)">${b.name}</span>`;
+    item.className =
+      "flex cursor-pointer gap-2 border-b border-line px-3 py-2 text-[13px]" +
+      (active ? " bg-brand-soft" : "");
+    item.innerHTML = `<span class="min-w-9 font-semibold text-brand-text">${b.abbr}</span>
+      <span class="text-ink">${b.name}</span>`;
     item.onmousedown = (e) => {
       e.preventDefault();
       selectBook(dropdownId, i);
@@ -250,7 +250,7 @@ function selectBook(dropdownId, idx) {
   if (input) input.value = b.abbr;
   if (status) {
     status.textContent = "✓ " + b.name;
-    status.style.color = "var(--green)";
+    status.style.color = "var(--success)";
   }
   closeBookDropdown(dropdownId);
   if (inputId === "sc-book") updateScriptureRefBadge();
@@ -358,7 +358,7 @@ let scriptureValidateSeq = 0;
 function scheduleScriptureValidation() {
   clearTimeout(scriptureValidateTimer);
   scriptureValidateSeq++;
-  showAlertMessage("sc-verse-status", "", "var(--red)");
+  showAlertMessage("sc-verse-status", "", "var(--danger)");
   scriptureValidateTimer = setTimeout(validateScriptureInput, 400);
 }
 
@@ -374,7 +374,7 @@ async function validateScriptureInput() {
     return; // 조회 실패(네트워크 등)는 생성 시점에 다시 확인됨
   }
   if (seq !== scriptureValidateSeq) return; // 그 사이 입력이 바뀜
-  showAlertMessage("sc-verse-status", message, "var(--red)");
+  showAlertMessage("sc-verse-status", message, "var(--danger)");
 }
 
 // 조회 결과가 요청한 범위와 다르면 안내 문구, 정상이면 빈 문자열
@@ -424,16 +424,16 @@ async function addExtraVerse() {
     showAlertMessage(
       "ev-add-status",
       "❌ 슬라이드 번호·책·장·시작절을 입력하세요",
-      "var(--red)",
+      "var(--danger)",
     );
     return;
   }
   status.textContent = "불러오는 중...";
-  status.style.color = "var(--text-light)";
+  status.style.color = "var(--muted)";
   try {
     const data = await fetchBibleVerses(book, ch, vsS, vsE);
     if (data.error) {
-      showAlertMessage("ev-add-status", "❌ " + data.error, "var(--red)");
+      showAlertMessage("ev-add-status", "❌ " + data.error, "var(--danger)");
       return;
     }
 
@@ -447,9 +447,9 @@ async function addExtraVerse() {
     });
     const problem = verseRangeProblem(data, vsS, vsE);
     if (problem) {
-      showAlertMessage("ev-add-status", problem.replace("❌", "⚠ " + data.ref + " 추가됨 ·"), "var(--red)");
+      showAlertMessage("ev-add-status", problem.replace("❌", "⚠ " + data.ref + " 추가됨 ·"), "var(--danger)");
     } else {
-      showAlertMessage("ev-add-status", `✓ ${data.ref} 추가됨`, "var(--green)");
+      showAlertMessage("ev-add-status", `✓ ${data.ref} 추가됨`, "var(--success)");
     }
 
     ["ev-book", "ev-chapter", "ev-verse-start", "ev-verse-end"].forEach(
@@ -463,7 +463,7 @@ async function addExtraVerse() {
     $("ev-book-status").textContent = "";
     renderExtraVerseList();
   } catch (e) {
-    showAlertMessage("ev-add-status", "❌ " + e.message, "var(--red)");
+    showAlertMessage("ev-add-status", "❌ " + e.message, "var(--danger)");
   }
 }
 
@@ -499,7 +499,7 @@ function renderSlots() {
 
   if (state.genSlots.length === 0) {
     list.innerHTML =
-      '<p style="color:var(--text-light);font-size:13px;text-align:center;padding:16px">+ 아래에서 슬롯을 추가하세요</p>';
+      '<p class="p-4 text-center text-[13px] text-muted">+ 아래에서 슬롯을 추가하세요</p>';
     return;
   }
 
@@ -507,8 +507,10 @@ function renderSlots() {
     const div = document.createElement("div");
     div.className = "slot-item" + (slot.skip ? " skipped" : "");
     div.innerHTML = `
-      <div class="slot-label">${slot.name}</div>
-      <div class="after-slide">슬라이드 ${slot.after_slide_index + 1} 이후</div>
+      <div class="slot-head">
+        <div class="slot-label">${slot.name}</div>
+        <div class="after-slide">슬라이드 ${slot.after_slide_index + 1} 이후</div>
+      </div>
       <div class="slot-hymn-search">
         <input type="number" placeholder="번호" value="${
           slot.hymn_number || ""
@@ -525,12 +527,12 @@ function renderSlots() {
         }">
           ${slot.hymn_title || ""}
         </div>
-        <label style="cursor:pointer;margin:0;" title="파일 직접 업로드">
-          <input type="file" accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" style="display:none"
+        <label class="mb-0 cursor-pointer" title="파일 직접 업로드">
+          <input type="file" accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="hidden"
             onchange="uploadHymnFile(${idx}, this)" ${
               slot.skip ? "disabled" : ""
             }>
-          <span class="btn btn-outline btn-sm" style="white-space:nowrap">📎 파일</span>
+          <span class="btn btn-outline btn-sm">📎 파일</span>
         </label>
       </div>
       <label class="skip-toggle">
@@ -538,7 +540,7 @@ function renderSlots() {
           slot.skip ? "checked" : ""
         } onchange="toggleSkip(${idx})"> 스킵
       </label>
-      <button class="btn btn-danger" onclick="removeSlot(${idx})">✕</button>
+      <button class="btn btn-danger max-sm:hidden" onclick="removeSlot(${idx})">✕</button>
     `;
     list.appendChild(div);
   });
@@ -810,9 +812,9 @@ function renderCfgSlots() {
 
   cfgSlots.forEach((slot, idx) => {
     const div = document.createElement("div");
-    div.style.cssText =
-      "display:flex;gap:10px;align-items:center;background:var(--dark3);border:1px solid #4a4020;border-radius:8px;padding:10px 14px;";
-    const skip = `<label class="skip-toggle" style="margin:0"><input type="checkbox" ${
+    div.className =
+      "flex flex-wrap items-center gap-2.5 rounded-md border border-line bg-surface px-3.5 py-2.5";
+    const skip = `<label class="skip-toggle"><input type="checkbox" ${
       slot.default_skip ? "checked" : ""
     } onchange="toggleCfgSlotDefaultSkip(${idx})"> 기본 스킵</label>`;
     const del = `<button class="btn btn-danger" onclick="removeCfgSlot(${idx})">✕</button>`;
@@ -820,17 +822,17 @@ function renderCfgSlots() {
     if (cfgSlotEditMode) {
       div.innerHTML = `
         <input type="text" value="${escapeAttr(slot.name)}" placeholder="슬롯 이름"
-          style="flex:1" oninput="updateCfgSlot(${idx}, 'name', this.value)">
-        <span style="color:var(--text-light);font-size:12px;white-space:nowrap">슬라이드</span>
+          class="min-w-0 flex-1" oninput="updateCfgSlot(${idx}, 'name', this.value)">
+        <span class="whitespace-nowrap text-xs text-muted">슬라이드</span>
         <input type="number" min="1" value="${slot.after_slide_index + 1}"
-          style="width:80px" oninput="updateCfgSlot(${idx}, 'after', this.value)">
-        <span style="color:var(--text-light);font-size:12px;white-space:nowrap">이후</span>
+          class="!w-20" oninput="updateCfgSlot(${idx}, 'after', this.value)">
+        <span class="whitespace-nowrap text-xs text-muted">이후</span>
         ${skip}${del}
       `;
     } else {
       div.innerHTML = `
-        <span style="color:var(--gold);font-weight:600;font-size:13px;flex:1">${slot.name}</span>
-        <span style="color:var(--text-light);font-size:12px">슬라이드 ${
+        <span class="min-w-[90px] flex-1 text-[13px] font-semibold text-brand-text">${slot.name}</span>
+        <span class="text-xs text-muted">슬라이드 ${
           slot.after_slide_index + 1
         } 이후</span>
         ${skip}${del}
