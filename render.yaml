@@ -4,6 +4,7 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /api/health
+    autoDeployTrigger: checksPass  # CI(.github/workflows/ci.yml)가 통과한 커밋만 배포
     envVars:
       - key: STORAGE
         value: supabase

@@ -29,6 +29,34 @@ class DeployFileTests(unittest.TestCase):
         self.assertIn("healthCheckPath: /api/health", read("render.yaml"))
         self.assertIn("/api/health", read(".github/workflows/keepalive.yml"))
 
+    def test_render_deploys_only_after_ci_passes(self):
+        self.assertIn("autoDeployTrigger: checksPass", read("render.yaml"))
+
+    def test_ci_workflow_covers_pull_requests_and_master(self):
+        ci = read(".github/workflows/ci.yml")
+        for needle in ("pull_request:", "branches: [master]", "unittest discover",
+                       "py_compile", "hymn-library.test.js", "node --check"):
+            self.assertIn(needle, ci)
+
+    def test_deploy_verify_waits_for_ci_and_checks_commit(self):
+        v = read(".github/workflows/deploy-verify.yml")
+        self.assertIn("workflows: [CI]", v)
+        self.assertIn("/api/health", v)
+        self.assertIn("head_sha", v)
+
+    def test_health_reports_render_commit_only_when_set(self):
+        from unittest import mock
+        from app import create_app
+
+        app = create_app({"TESTING": True, "STORAGE": "local",
+                          "CONFIG_FILE": os.path.join(ROOT, "no-such-config.json")})
+        with mock.patch.dict(os.environ, {"RENDER_GIT_COMMIT": "abc123"}):
+            self.assertEqual(app.test_client().get("/api/health").get_json(),
+                             {"ok": True, "commit": "abc123"})
+        env = {k: v for k, v in os.environ.items() if k != "RENDER_GIT_COMMIT"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(app.test_client().get("/api/health").get_json(), {"ok": True})
+
 
 if __name__ == "__main__":
     unittest.main()
