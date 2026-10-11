@@ -1,0 +1,16 @@
+{
+  "name": "PPT 생성",
+  "short_name": "PPT 생성",
+  "description": "주보 PPT에 찬송가·성가대 가사·성경 구절 슬라이드를 자동 삽입합니다.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070d1f",
+  "theme_color": "#0e1a3a",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
