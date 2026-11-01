@@ -16,8 +16,7 @@ def create_app(config=None):
     app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024
     app.config.update(config or {})
     app.register_blueprint(bp)
-    if (app.config.get("APP_PASSWORD") or os.environ.get("APP_PASSWORD")
-            or os.environ.get("STORAGE") == "supabase"):
+    if app.config.get("APP_PASSWORD") or os.environ.get("APP_PASSWORD"):
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
     init_auth(app)
 

@@ -17,18 +17,39 @@ function createGenSlot(s, i) {
   };
 }
 
+const SLIDE_DEFAULT_KEYS = [
+  "choir_title_idx",
+  "choir_lyrics_idx",
+  "scripture_title_idx",
+  "scripture_lyrics_idx",
+  "extra_verse_slide_idx",
+];
+
+// 저장된(또는 가져온) 값에서 알려진 항목만 골라 설정 객체를 만든다
+function normalizeConfig(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const hymn_slots = (Array.isArray(src.hymn_slots) ? src.hymn_slots : [])
+    .filter(
+      (s) =>
+        s &&
+        typeof s.name === "string" &&
+        Number.isInteger(s.after_slide_index),
+    )
+    .map((s) => ({
+      name: s.name,
+      after_slide_index: s.after_slide_index,
+      ...(s.default_skip ? { default_skip: true } : {}),
+    }));
+  const defaults = src.slide_defaults || {};
+  const slide_defaults = {};
+  for (const k of SLIDE_DEFAULT_KEYS) {
+    slide_defaults[k] = Number.isInteger(defaults[k]) ? defaults[k] : null;
+  }
+  return { hymn_slots, slide_defaults };
+}
+
 let state = {
-  config: {
-    template_file: "",
-    hymn_slots: [],
-    slide_defaults: {
-      choir_title_idx: null,
-      choir_lyrics_idx: null,
-      scripture_title_idx: null,
-      scripture_lyrics_idx: null,
-      extra_verse_slide_idx: null,
-    },
-  },
+  config: normalizeConfig(null),
   genSlots: [],
   bibleMeta: { books: [], abbr_to_id: {} },
   scriptureKey: "", // 마지막으로 조회한 책|장|시작절|끝절 (같은 입력이면 재조회 생략)
@@ -45,13 +66,13 @@ let hymnSearchTimers = {};
 let previewTimer = null;
 let bookDropdownState = {}; // keyed by dropdownId: { matches, activeIndex, statusId }
 
+// 설정(찬송가 슬롯·슬라이드 번호 기본값)은 이 브라우저의 localStorage에만 저장한다
 const CONFIG_CACHE_KEY = "church-ppt-config";
 
 function readCachedConfig() {
   try {
     const raw = localStorage.getItem(CONFIG_CACHE_KEY);
-    const cfg = raw ? JSON.parse(raw) : null;
-    return cfg && typeof cfg === "object" ? cfg : null;
+    return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
   }
@@ -60,9 +81,25 @@ function readCachedConfig() {
 function writeCachedConfig(cfg) {
   try {
     localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify(cfg));
+    return true;
   } catch (e) {
-    // 저장소 사용 불가 시 캐시 없이 동작 (다음 접속에 서버에서 다시 받음)
+    return false;
   }
+}
+
+async function loadConfig() {
+  const cached = readCachedConfig();
+  if (cached) return normalizeConfig(cached);
+  let seed = null;
+  try {
+    const res = await fetch("/static/default-config.json");
+    if (res.ok) seed = await res.json();
+  } catch (e) {
+    // 기본 설정을 못 받으면 빈 설정으로 시작
+  }
+  const cfg = normalizeConfig(seed);
+  writeCachedConfig(cfg);
+  return cfg;
 }
 
 // 애플리케이션 초기 데이터 바인딩
@@ -74,14 +111,10 @@ async function init() {
       return;
     }
 
-    // 설정은 이 기기에 처음 한 번만 서버에서 받고, 이후엔 localStorage만 참고한다
-    state.config = readCachedConfig();
-    if (!state.config) {
-      const res = await apiFetch("/api/config");
-      state.config = await res.json();
-      writeCachedConfig(state.config);
-    }
-    if (state.config.hymn_slots?.length > 0) {
+    // 설정은 이 브라우저의 localStorage에서 읽는다.
+    // 처음 접속한 브라우저는 배포본의 기본 설정(static/default-config.json)으로 시작해 한 번 저장한다.
+    state.config = await loadConfig();
+    if (state.config.hymn_slots.length > 0) {
       sortCfgSlots();
       state.genSlots = state.config.hymn_slots.map(createGenSlot);
       renderCfgSlots();
@@ -104,7 +137,7 @@ async function init() {
     const bm = await apiFetch("/api/bible-meta");
     state.bibleMeta = await bm.json();
   } catch (e) {
-    console.warn("초기 데이터 로드 실패 (Config / Bible-Meta)", e);
+    console.warn("초기 데이터 로드 실패 (Bible-Meta)", e);
   }
 }
 
@@ -918,7 +951,7 @@ function removeCfgSlot(idx) {
   renderCfgSlots();
 }
 
-async function saveConfig() {
+function saveConfig() {
   // 성가대/성경구절/추가구절 슬라이드 번호 기본값 캐싱
   const readIdx = (id) => {
     const v = $(id)?.value;
@@ -933,24 +966,15 @@ async function saveConfig() {
   };
 
   sortCfgSlots();
-  try {
-    await apiFetch("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state.config),
-    });
-  } catch (e) {
-    showAlert("cfg-alert", "❌ " + e.message, "error");
+  if (!writeCachedConfig(state.config)) {
+    showAlert("cfg-alert", "❌ 이 브라우저에서는 설정을 저장할 수 없어요", "error");
     return;
   }
-  writeCachedConfig(state.config);
 
-  if (state.config.hymn_slots) {
-    sortCfgSlots();
-    state.genSlots = state.config.hymn_slots.map(createGenSlot);
-    renderSlots();
-    renderCfgSlots();
-  }
+  sortCfgSlots();
+  state.genSlots = state.config.hymn_slots.map(createGenSlot);
+  renderSlots();
+  renderCfgSlots();
   showAlert("cfg-alert", "✓ 설정이 저장되었어요!", "success");
 }
 
