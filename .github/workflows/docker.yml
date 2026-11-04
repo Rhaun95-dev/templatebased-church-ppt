@@ -1,5 +1,5 @@
 name: Docker build
-# Render builds this image from the Dockerfile. Verify it still builds before merging.
+# Verify the Dockerfile image still builds before merging.
 # Only runs when something that affects the image changes (the apt layer is slow).
 on:
   pull_request:
@@ -7,7 +7,6 @@ on:
       - Dockerfile
       - .dockerignore
       - requirements.txt
-      - render.yaml
   workflow_dispatch:
 
 concurrency:

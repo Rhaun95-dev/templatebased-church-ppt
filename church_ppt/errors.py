@@ -10,11 +10,3 @@ class AppError(Exception):
 
 class ConversionError(AppError):
     status = 422
-
-
-class StorageUnavailable(AppError):
-    status = 503
-
-
-class NotFound(AppError):
-    status = 404
