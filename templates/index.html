@@ -143,29 +143,6 @@
               빈 줄(Enter 두 번)로 단락을 구분하면 슬라이드가 자동 분할됩니다.
             </p>
 
-            <div class="choir-slide-select">
-              <div>
-                <label>제목 슬라이드 (번호)</label>
-                <input
-                  type="number"
-                  id="choir-title-idx"
-                  placeholder="예: 5"
-                  min="1"
-                />
-                <div class="path-status" id="choir-title-status"></div>
-              </div>
-              <div>
-                <label>가사 템플릿 슬라이드 (번호)</label>
-                <input
-                  type="number"
-                  id="choir-lyrics-idx"
-                  placeholder="예: 6"
-                  min="1"
-                />
-                <div class="path-status" id="choir-lyrics-status"></div>
-              </div>
-            </div>
-
             <label class="mt-4">곡명</label>
             <input
               type="text"
@@ -513,6 +490,37 @@
             <button class="btn btn-outline btn-sm" onclick="addCfgSlot()">
               + 추가
             </button>
+          </div>
+
+          <div class="sep"></div>
+
+          <label class="mb-0">성가대 슬롯 설정</label>
+          <p class="section-hint">
+            성가대 곡명과 가사가 들어갈 템플릿 슬라이드 번호를 지정하세요.<br />설정
+            저장 후 다음에도 자동으로 불러와집니다.
+          </p>
+
+          <div class="choir-slide-select">
+            <div>
+              <label>제목 슬라이드 (번호)</label>
+              <input
+                type="number"
+                id="choir-title-idx"
+                placeholder="예: 5"
+                min="1"
+              />
+              <div class="path-status" id="choir-title-status"></div>
+            </div>
+            <div>
+              <label>가사 템플릿 슬라이드 (번호)</label>
+              <input
+                type="number"
+                id="choir-lyrics-idx"
+                placeholder="예: 6"
+                min="1"
+              />
+              <div class="path-status" id="choir-lyrics-status"></div>
+            </div>
           </div>
 
           <button class="btn btn-gold mt-4 w-full" onclick="saveConfig()">

@@ -732,7 +732,7 @@ async function generatePPT() {
     if (!lyricsIdx) {
       showAlert(
         "generate-alert",
-        "성가대 가사 슬라이드 번호를 입력해주세요",
+        "설정의 성가대 슬롯 설정에서 가사 템플릿 슬라이드 번호를 입력해주세요",
         "error",
       );
       return;
