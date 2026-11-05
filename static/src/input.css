@@ -83,6 +83,15 @@
   .tab-panel.active {
     @apply block;
   }
+  .home-link {
+    @apply flex min-w-0 cursor-pointer items-center gap-3 rounded-md text-ink no-underline sm:gap-4;
+  }
+  .home-link:hover h1 {
+    @apply text-brand-text;
+  }
+  .home-link:focus-visible {
+    @apply shadow-focus outline-none;
+  }
   .icon-btn {
     @apply flex h-10 w-10 flex-none cursor-pointer items-center justify-center rounded-md border border-line bg-raised text-lg text-ink transition-colors hover:bg-brand-soft;
   }

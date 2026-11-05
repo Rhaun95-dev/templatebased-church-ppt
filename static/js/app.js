@@ -32,6 +32,14 @@ function toggleSettings() {
   showPanel(open ? lastMainTab : "settings");
 }
 
+// 왼쪽 상단 로고·제목: 설정 화면이든 다른 탭이든 첫 화면(찬송가 탭)으로 돌아간다.
+// 입력한 내용이 사라지지 않도록 새로고침 없이 화면만 전환한다.
+function goHome(e) {
+  if (e) e.preventDefault();
+  switchTab("hymn");
+  window.scrollTo(0, 0);
+}
+
 // 화면 테마 (navy-dark / navy-light)
 function setTheme(name) {
   document.documentElement.dataset.theme = name;

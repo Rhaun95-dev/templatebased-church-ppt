@@ -31,13 +31,20 @@
     <header
       class="flex items-center gap-3 border-b border-line bg-raised px-4 py-4 sm:gap-4 sm:px-8 sm:py-5"
     >
-      <span
-        class="flex h-10 w-10 flex-none items-center justify-center rounded-md bg-brand-soft text-xl text-ink"
-        >✝</span
+      <a
+        href="/"
+        class="home-link"
+        aria-label="홈으로"
+        title="홈으로"
+        onclick="goHome(event)"
       >
-      <div class="min-w-0 flex-1">
-        <h1 class="text-lg font-bold leading-6 text-ink">PPT 생성</h1>
-      </div>
+        <span
+          class="flex h-10 w-10 flex-none items-center justify-center rounded-md bg-brand-soft text-xl text-ink"
+          >✝</span
+        >
+        <h1 class="min-w-0 text-lg font-bold leading-6 text-ink">PPT 생성</h1>
+      </a>
+      <div class="flex-1"></div>
       <label class="theme-switch">
         <input
           type="checkbox"
