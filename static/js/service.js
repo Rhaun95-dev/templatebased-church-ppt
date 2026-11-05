@@ -480,10 +480,18 @@ async function addExtraVerse() {
   const vsE = vsEraw || vsS; // 끝절 미입력 시 시작절과 동일(한 절)로 처리
   const status = $("ev-add-status");
 
-  if (!slideIdx || !book || !ch || !vsS) {
+  if (!slideIdx) {
     showAlertMessage(
       "ev-add-status",
-      "❌ 슬라이드 번호·책·장·시작절을 입력하세요",
+      "❌ 설정의 성경 구절 슬롯 설정에서 추가 구절 슬라이드 번호를 입력하세요",
+      "var(--danger)",
+    );
+    return;
+  }
+  if (!book || !ch || !vsS) {
+    showAlertMessage(
+      "ev-add-status",
+      "❌ 책·장·시작절을 입력하세요",
       "var(--danger)",
     );
     return;
@@ -517,9 +525,6 @@ async function addExtraVerse() {
         $(id).value = "";
       },
     );
-    // 슬라이드 번호는 비우지 않고 캐싱된 기본값으로 되돌림
-    const defaultEvIdx = state.config.slide_defaults?.extra_verse_slide_idx;
-    $("ev-slide-idx").value = defaultEvIdx || "";
     $("ev-book-status").textContent = "";
     renderExtraVerseList();
   } catch (e) {
@@ -751,7 +756,7 @@ async function generatePPT() {
     if (!scLyricsIdx) {
       showAlert(
         "generate-alert",
-        "성경 구절 템플릿 슬라이드 번호를 입력해주세요",
+        "설정의 성경 구절 슬롯 설정에서 구절 템플릿 슬라이드 번호를 입력해주세요",
         "error",
       );
       return;
