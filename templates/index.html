@@ -208,37 +208,9 @@
 
           <div class="scripture-section" id="scripture-section">
             <p class="section-hint mb-3 mt-0">
-              시작 슬라이드(책이름/장절)와 구절 템플릿 슬라이드를 각각
-              지정하세요.
+              성경 구절을 입력하세요. 슬라이드 번호는 설정의 성경 구절 슬롯
+              설정에서 지정합니다.
             </p>
-
-            <div class="mb-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label
-                  >시작 슬라이드 번호
-                  <span class="text-[11px] font-normal text-ink"
-                    >(책이름/장절)</span
-                  ></label
-                >
-                <input
-                  type="number"
-                  id="sc-title-idx"
-                  placeholder="예: 7"
-                  min="1"
-                />
-                <div class="path-status" id="sc-title-status"></div>
-              </div>
-              <div>
-                <label>구절 템플릿 슬라이드 번호</label>
-                <input
-                  type="number"
-                  id="sc-lyrics-idx"
-                  placeholder="예: 8"
-                  min="1"
-                />
-                <div class="path-status" id="sc-lyrics-status"></div>
-              </div>
-            </div>
 
             <div
               class="mt-2.5 grid grid-cols-2 items-end gap-2.5 sm:grid-cols-[2fr_1fr_1fr_1fr]"
@@ -312,23 +284,13 @@
                 <span class="text-[11px] font-normal text-ink">(옵션)</span>
               </div>
               <p class="section-hint mb-2.5 mt-0">
-                구절 템플릿 슬라이드와 성경 범위를 입력 후 추가 버튼으로
-                등록하세요. 시작 슬라이드 없이 바로 구절이 채워집니다.
+                성경 범위를 입력 후 추가 버튼으로 등록하세요. 시작 슬라이드 없이
+                설정의 추가 구절 슬라이드에 바로 구절이 채워집니다.
               </p>
 
               <div
-                class="grid grid-cols-2 items-end gap-2 sm:grid-cols-[0.8fr_1.2fr_0.7fr_0.7fr_0.7fr_auto]"
+                class="grid grid-cols-2 items-end gap-2 sm:grid-cols-[1.2fr_0.7fr_0.7fr_0.7fr_auto]"
               >
-                <div>
-                  <label class="text-[11px]">슬라이드 번호</label>
-                  <input
-                    type="number"
-                    id="ev-slide-idx"
-                    placeholder="8"
-                    min="1"
-                  />
-                  <div class="path-status !h-3.5"></div>
-                </div>
                 <div>
                   <label class="text-[11px]">책 (약어)</label>
                   <div class="relative">
@@ -520,6 +482,52 @@
                 min="1"
               />
               <div class="path-status" id="choir-lyrics-status"></div>
+            </div>
+          </div>
+
+          <div class="sep"></div>
+
+          <label class="mb-0">성경 구절 슬롯 설정</label>
+          <p class="section-hint">
+            성경 구절이 들어갈 템플릿 슬라이드 번호를 지정하세요.<br />설정 저장
+            후 다음에도 자동으로 불러와집니다.
+          </p>
+
+          <div class="choir-slide-select">
+            <div>
+              <label
+                >시작 슬라이드 (번호)
+                <span class="text-[11px] font-normal text-ink"
+                  >(책이름/장절)</span
+                ></label
+              >
+              <input
+                type="number"
+                id="sc-title-idx"
+                placeholder="예: 7"
+                min="1"
+              />
+              <div class="path-status" id="sc-title-status"></div>
+            </div>
+            <div>
+              <label>구절 템플릿 슬라이드 (번호)</label>
+              <input
+                type="number"
+                id="sc-lyrics-idx"
+                placeholder="예: 8"
+                min="1"
+              />
+              <div class="path-status" id="sc-lyrics-status"></div>
+            </div>
+            <div>
+              <label>추가 구절 슬라이드 (번호)</label>
+              <input
+                type="number"
+                id="ev-slide-idx"
+                placeholder="예: 14"
+                min="1"
+              />
+              <div class="path-status" id="ev-slide-status"></div>
             </div>
           </div>
 
